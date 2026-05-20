@@ -1,0 +1,7 @@
+Metric,Biased Model,Fairness-Aware,Change
+Demographic Parity Difference,0.0067,0.0133,0.0067
+Disparate Impact Ratio,0.9903,0.981,-0.0093
+Equalized Odds Difference,0.18,0.08,-0.1
+Female Selection Rate,0.68,0.7,0.02
+Female False Negative Rate,0.28,0.24,-0.04
+Overall Accuracy,0.67,0.625,-0.045
