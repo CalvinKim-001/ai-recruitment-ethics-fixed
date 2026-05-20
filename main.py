@@ -88,21 +88,21 @@ st.sidebar.markdown("""
 page_key = pages[selected_page]
 
 if page_key == "home":
-    from app.pages import page_home
+    import page_home
     page_home.render()
 
 elif page_key == "evaluation":
-    from app.pages import page_evaluation
+    import page_evaluation
     page_evaluation.render()
 
 elif page_key == "fairness":
-    from app.pages import page_fairness
+    import page_fairness
     page_fairness.render()
 
 elif page_key == "comparison":
-    from app.pages import page_comparison
+    import page_comparison
     page_comparison.render()
 
 elif page_key == "audit":
-    from app.pages import page_audit
+    import page_audit
     page_audit.render()
