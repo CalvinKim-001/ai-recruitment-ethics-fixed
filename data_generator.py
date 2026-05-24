@@ -87,12 +87,33 @@ def generate_hiring_dataset(n_candidates: int = 1500) -> pd.DataFrame:
 
     return df
 
-if __name__ == "__main__":
-    df = generate_hiring_dataset(1500)
-    print("Dataset shape:", df.shape)
-    print("\nGender distribution and hiring rates:")
-    for g in ["Male", "Female"]:
-        subset = df[df["gender"] == g]
-        print(f"\n  {g}:")
-        print(f"    Count: {len(subset)}")
-        print(f"    Hire Rate: {round(subset['hired'].mean() * 100, 1)}%")
+# =================================================================
+# 请把以下三个工具函数补充粘贴到 data_generator.py 的最底部
+# =================================================================
+
+def get_education_label(level: int) -> str:
+    """Convert numeric education level to human-readable label."""
+    mapping = {0: "High School", 1: "Bachelor's", 2: "Master's", 3: "PhD"}
+    return mapping.get(level, "Unknown")
+
+def get_company_tier_label(tier: int) -> str:
+    """Convert numeric company tier to human-readable label."""
+    mapping = {1: "Startup", 2: "Mid-size", 3: "Large Corp", 4: "Top Tech (FAANG)"}
+    return mapping.get(tier, "Unknown")
+
+def get_dataset_summary(df: pd.DataFrame) -> dict:
+    """
+    Return a summary of the dataset's gender distribution and hiring rates.
+    This is used to demonstrate the imbalance before any model is trained.
+    """
+    summary = {}
+    for gender in ["Male", "Female"]:
+        subset = df[df["gender"] == gender]
+        summary[gender] = {
+            "count": len(subset),
+            "pct_of_dataset": round(len(subset) / len(df) * 100, 1),
+            "hire_rate": round(subset["hired"].mean() * 100, 1),
+            "avg_programming_skill": round(subset["programming_skill"].mean(), 1),
+            "avg_interview_score": round(subset["interview_score"].mean(), 1),
+        }
+    return summary
