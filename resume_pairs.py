@@ -425,6 +425,17 @@ def get_pair_as_dataframe(pair: dict) -> "pd.DataFrame":
         candidate["pair_id"] = pair["pair_id"]
         candidate["gender"] = "Male" if role == "male" else "Female"
         candidate["scenario"] = pair["scenario"]
+        
+        # ==========================================================
+        # 【核心修复】：在这里强行注入“简历性别暗示信号”
+        # 对应 data_generator.py 里的逻辑：
+        # 男性简历分配高分 (0.85)，女性简历由于含有 Women's 等词汇分配低分 (0.15)
+        # ==========================================================
+        if role == "male":
+            candidate["resume_gender_signal"] = 0.85
+        else:
+            candidate["resume_gender_signal"] = 0.15
+            
         rows.append(candidate)
 
     return pd.DataFrame(rows)
