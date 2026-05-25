@@ -45,6 +45,7 @@ FEATURE_COLUMNS = [
     "company_tier",
     "project_experience",
     "interview_score",
+    "resume_gender_signal",
 ]
 
 TARGET_COLUMN = "hired"
