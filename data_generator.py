@@ -5,8 +5,8 @@ Generates synthetic hiring data for the AI Recruitment Bias project.
 
 ETHICAL NOTE:
 This data is intentionally imbalanced. We simulate historical human bias
-not by explicit gender discrimination, but through PROXY VARIABLES (like 
-resume language, clubs, and college names). 
+not by explicit gender discrimination, but through PROXY VARIABLES (like
+resume language, clubs, and college names).
 
 This teaches the core lesson of the Amazon AI case: algorithms will find
 and penalize female-associated patterns even if the "Gender" column is hidden.
@@ -19,7 +19,7 @@ RANDOM_SEED = 42
 np.random.seed(RANDOM_SEED)
 
 def generate_hiring_dataset(n_candidates: int = 1500) -> pd.DataFrame:
-    
+
     # 1. Assign gender (72% Male, 28% Female)
     gender = np.random.choice(
         ["Male", "Female"],
@@ -65,7 +65,7 @@ def generate_hiring_dataset(n_candidates: int = 1500) -> pd.DataFrame:
 
     # Normalize to a 0–1 probability range
     base_hire_prob = (base_hire_prob - base_hire_prob.min()) / (base_hire_prob.max() - base_hire_prob.min())
-    
+
     # Generate labels
     hired = np.random.binomial(1, base_hire_prob)
 
@@ -82,7 +82,7 @@ def generate_hiring_dataset(n_candidates: int = 1500) -> pd.DataFrame:
         "company_tier": company_tier,
         "project_experience": project_experience,
         "interview_score": interview_score,
-        "hired": hired 
+        "hired": hired
     })
 
     return df
