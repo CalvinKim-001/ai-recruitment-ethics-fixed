@@ -2,7 +2,7 @@
 page_evaluation.py
 ------------------
 Interactive Workspace integrating Single Candidate Auditing & Resume Pairs Experimentation.
-Restores missing Candidate Name, Human-in-the-Loop Overrides, and detailed textual explanations.
+Restores candidate name inputs, human-in-the-loop overrides, and introduces instant preset loading buttons.
 """
 
 import streamlit as st
@@ -22,37 +22,110 @@ def render():
         st.warning("⚙️ AI Models are not initialized yet. Please navigate to the **Fairness Audit Dashboard** to trigger training routines first.")
         return
 
-    # 使用 Streamlit Tabs 让原有单人评估功能与 Resume Pairs 实验完美并存
+    # Initialize form preset variables in session state if not present
+    if "preset_name" not in st.session_state:
+        st.session_state.preset_name = "Alex Morgan"
+    if "preset_exp" not in st.session_state:
+        st.session_state.preset_exp = 3
+    if "preset_edu" not in st.session_state:
+        st.session_state.preset_edu = "Bachelor's"
+    if "preset_tier" not in st.session_state:
+        st.session_state.preset_tier = "Mid-size"
+    if "preset_prog" not in st.session_state:
+        st.session_state.preset_prog = 75
+    if "preset_lead" not in st.session_state:
+        st.session_state.preset_lead = 60
+    if "preset_comm" not in st.session_state:
+        st.session_state.preset_comm = 65
+    if "preset_proj" not in st.session_state:
+        st.session_state.preset_proj = 2
+    if "preset_inter" not in st.session_state:
+        st.session_state.preset_inter = 70
+    if "preset_signal" not in st.session_state:
+        st.session_state.preset_signal = "Standard Profile"
+
+    # Use Streamlit Tabs to keep interactive features and experiments organized
     tab1, tab2 = st.tabs(["🎯 Interactive Candidate Evaluator", "📊 Gender Signals Pair Experiment"])
 
     # =========================================================================
-    # TAB 1: 实时单人求职者特征组合评估（完美找回丢失的姓名、Override及反馈功能）
+    # TAB 1: Interactive Candidate Evaluator (With Manual Clicking Presets)
     # =========================================================================
     with tab1:
         st.subheader("Evaluate Custom Candidate Specifications")
-        st.markdown("Simulate a custom profile to observe real-time risk disparity metrics between systems.")
+        st.markdown("Click one of the quick-load presets below or manually adjust the parameters to test the models.")
         
+        # 【기능 보완】: 사용자가 직접 클릭하여 프로필을 즉시 불러올 수 있는 수동 클릭 옵션 버튼
+        st.markdown("##### 💡 Quick Load Candidate Presets (인공 클릭 옵션)")
+        p_col1, p_col2, p_col3 = st.columns(3)
+        
+        if p_col1.button("👨 Load Qualified Male Profile (James)"):
+            st.session_state.preset_name = "James Whitfield"
+            st.session_state.preset_exp = 2
+            st.session_state.preset_edu = "Bachelor's"
+            st.session_state.preset_tier = "Mid-size"
+            st.session_state.preset_prog = 88
+            st.session_state.preset_lead = 82
+            st.session_state.preset_comm = 78
+            st.session_state.preset_proj = 4
+            st.session_state.preset_inter = 85
+            st.session_state.preset_signal = "Standard Profile"
+            st.rerun()
+            
+        if p_col2.button("👩 Load Paired Female Profile with 'Women's' Signal (Claire)"):
+            st.session_state.preset_name = "Claire Whitfield"
+            st.session_state.preset_exp = 2
+            st.session_state.preset_edu = "Bachelor's"
+            st.session_state.preset_tier = "Mid-size"
+            st.session_state.preset_prog = 88
+            st.session_state.preset_lead = 82
+            st.session_state.preset_comm = 78
+            st.session_state.preset_proj = 4
+            st.session_state.preset_inter = 85
+            st.session_state.preset_signal = "Features Gendered Phrases (e.g., Women's Club)"
+            st.rerun()
+            
+        if p_col3.button("🔄 Reset to Default Blank Profile"):
+            st.session_state.preset_name = "Alex Morgan"
+            st.session_state.preset_exp = 3
+            st.session_state.preset_edu = "Bachelor's"
+            st.session_state.preset_tier = "Mid-size"
+            st.session_state.preset_prog = 75
+            st.session_state.preset_lead = 60
+            st.session_state.preset_comm = 65
+            st.session_state.preset_proj = 2
+            st.session_state.preset_inter = 70
+            st.session_state.preset_signal = "Standard Profile"
+            st.rerun()
+
+        st.divider()
+
         with st.form("interactive_evaluator_form"):
-            # 【功能找回】：候选人姓名输入框
-            candidate_name = st.text_input("Candidate Name", "Alex Morgan")
+            # 후보자 이름 입력 상자 복원
+            candidate_name = st.text_input("Candidate Name", value=st.session_state.preset_name)
             st.divider()
             
             c1, c2, c3 = st.columns(3)
             with c1:
-                exp = st.slider("Years of Industry Experience", 0, 10, 3)
-                edu = st.selectbox("Completed Education Level", ["High School", "Bachelor's", "Master's", "PhD"], index=1)
-                tier = st.selectbox("Previous Company Profile Tier", ["Startup", "Mid-size", "Large Corp", "Top Tech (FAANG)"], index=1)
+                exp = st.slider("Years of Industry Experience", 0, 10, value=st.session_state.preset_exp)
+                
+                edu_options = ["High School", "Bachelor's", "Master's", "PhD"]
+                edu = st.selectbox("Completed Education Level", edu_options, index=edu_options.index(st.session_state.preset_edu))
+                
+                tier_options = ["Startup", "Mid-size", "Large Corp", "Top Tech (FAANG)"]
+                tier = st.selectbox("Previous Company Profile Tier", tier_options, index=tier_options.index(st.session_state.preset_tier))
             with c2:
-                prog = st.slider("Programming Mastery Score", 0, 100, 75)
-                lead = st.slider("Leadership Aptitude Vector", 0, 100, 60)
-                comm = st.slider("Communication Articulation Index", 0, 100, 65)
+                prog = st.slider("Programming Mastery Score", 0, 100, value=st.session_state.preset_prog)
+                lead = st.slider("Leadership Aptitude Vector", 0, 100, value=st.session_state.preset_lead)
+                comm = st.slider("Communication Articulation Index", 0, 100, value=st.session_state.preset_comm)
             with c3:
-                proj = st.slider("Completed Open Source Projects", 0, 5, 2)
-                inter = st.slider("Live Technical Interview Evaluation", 0, 100, 70)
-                signal_type = st.radio("Resume Phrasing Signal Pattern", ["Standard Profile", "Features Gendered Phrases (e.g., Women's Club)"])
+                proj = st.slider("Completed Open Source Projects", 0, 5, value=st.session_state.preset_proj)
+                inter = st.slider("Live Technical Interview Evaluation", 0, 100, value=st.session_state.preset_inter)
+                
+                sig_options = ["Standard Profile", "Features Gendered Phrases (e.g., Women's Club)"]
+                signal_type = st.radio("Resume Phrasing Signal Pattern", sig_options, index=sig_options.index(st.session_state.preset_signal))
             
             st.divider()
-            # 【功能找回】：人机协作（Human-in-the-Loop）治理改写项与合规日志反馈框
+            # 인사담당자 관리자 권한 Override 항목 및 거버넌스 피드백 입력란 복원
             st.markdown("##### 👥 Human-in-the-Loop Governance Override")
             hr_override = st.selectbox(
                 "Recruiter Override AI Algorithmic Recommendation?", 
@@ -66,7 +139,6 @@ def render():
             submitted = st.form_submit_button("Run Algorithmic Auditing & Log Entry", type="primary")
 
         if submitted:
-            # Map categories back into standard feature models values
             edu_map = {"High School": 0, "Bachelor's": 1, "Master's": 2, "PhD": 3}
             tier_map = {"Startup": 1, "Mid-size": 2, "Large Corp": 3, "Top Tech (FAANG)": 4}
             sig_val = 0.15 if signal_type == "Features Gendered Phrases (e.g., Women's Club)" else 0.85
@@ -90,7 +162,7 @@ def render():
                 st.session_state.fair_scaler
             )
             
-            # 建立系统快照结构并完美追加至全局审计日志链条
+            # 시스템 데이터 스냅샷을 생성하여 글로벌 감사 로그 객체에 저장
             audit_entry = {
                 "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "candidate_name": candidate_name,
@@ -119,7 +191,7 @@ def render():
             st.success("📝 Candidate evaluated and governance audit log entry saved successfully! View the records on the Governance page.")
 
     # =========================================================================
-    # TAB 2: 10组简历配对实验看板（数字标签防拉伸，完美补充说明项缺失）
+    # TAB 2: Gender Signals Pair Experiment (With Enhanced Descriptive Text)
     # =========================================================================
     with tab2:
         st.subheader("Gender Signals Audit Dashboard (10 Matched Profiles)")
@@ -146,24 +218,20 @@ def render():
 
         st.markdown("#### Score Disparity Visualizer")
         
-        # 建立画幅控制结构
         fig, ax = plt.subplots(figsize=(12, 5))
         indices = np.arange(len(differentials))
         bar_width = 0.35
 
-        # 换算至百分点值 (pp)
         b_data = differentials["biased_score_gap"] * 100
         f_data = differentials["fair_score_gap"] * 100
 
         bar1 = ax.bar(indices - bar_width/2, b_data, bar_width, label="Biased Model Gap", color="#D9534F")
         bar2 = ax.bar(indices + bar_width/2, f_data, bar_width, label="Fairness-Aware Model Gap", color="#5CB85C")
 
-        # 动态视窗控制，绝不产生过大硬编码越界导致拉伸
         v_max = max(b_data.max(), f_data.max(), 3.0)
         v_min = min(b_data.min(), f_data.min(), -3.0)
         ax.set_ylim(v_min * 1.4, v_max * 1.4)
 
-        # 改用安全稳定的数字内嵌标签标注
         ax.bar_label(bar1, fmt='%.1f', padding=3, fontsize=8, color='#A33A37')
         ax.bar_label(bar2, fmt='%.1f', padding=3, fontsize=8, color='#3B823B')
 
@@ -178,16 +246,16 @@ def render():
         
         st.pyplot(fig)
 
-        # 下拉审计详情面板
+        # Dropdown selection panel with 100% stable indexing
         st.markdown("---")
         options = [f"Resume Pair {i+1}: {resume_pairs.RESUME_PAIRS[i]['scenario']}" for i in range(10)]
         p_sel = st.selectbox("Inspect Configuration Profile Parameters:", options)
-        sel_idx = options.index(p_sel)  # 采用100%安全的内置索引精确定位
+        sel_idx = options.index(p_sel)
         
         r_pair = resume_pairs.RESUME_PAIRS[sel_idx]
         d_row = differentials.iloc[sel_idx]
         
-        # 【功能补齐与强化】：完美拉齐展示学术研究文本、简历细节对比、彻底解决说明缺失问题
+        # 【텍스트 설명 복원】: 이력서 비교 실험 매개변수 하단에 상세 설명란 전면 노출
         st.markdown("### 📝 Experiment Pair Qualitative Details")
         st.info(f"**Historical Context & Scenario Explanation:**\n\n{r_pair['narrative']}")
         
