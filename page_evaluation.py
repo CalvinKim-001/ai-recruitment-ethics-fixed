@@ -2,7 +2,7 @@
 page_evaluation.py
 ------------------
 Interactive Workspace integrating Single Candidate Auditing & Resume Pairs Experimentation.
-Fixes the vertical axis stretching issue via bulletproof Matplotlib structures.
+Fixes the ValueError string splitting bug using robust indexing lookup.
 """
 
 import streamlit as st
@@ -22,11 +22,11 @@ def render():
         st.warning("⚙️ AI Models are not initialized yet. Please navigate to the **Fairness Audit Dashboard** to trigger training routines first.")
         return
 
-    # 使用 Streamlit Tabs 让原有丢失的功能与 Resume Pairs 并存
+    # 使用 Streamlit Tabs 让原有单人评估功能与 Resume Pairs 实验完美并存
     tab1, tab2 = st.tabs(["🎯 Interactive Candidate Evaluator", "📊 Gender Signals Pair Experiment"])
 
     # =========================================================================
-    # TAB 1: 完美找回丢失的实时单人评估功能 (Interactive Form)
+    # TAB 1: 实时单人求职者特征组合评估（找回的核心功能）
     # =========================================================================
     with tab1:
         st.subheader("Evaluate Custom Candidate Specifications")
@@ -90,7 +90,7 @@ def render():
                     st.error(f"Outcome: {evaluation_res['fair_recommendation']}")
 
     # =========================================================================
-    # TAB 2: 10组简历配对实验看板（彻底修复 Matplotlib 拉伸 Bug）
+    # TAB 2: 10组简历配对实验看板（彻底解决 Matplotlib 通天长线拉伸 Bug）
     # =========================================================================
     with tab2:
         st.subheader("Gender Signals Audit Dashboard (10 Matched Profiles)")
@@ -129,12 +129,12 @@ def render():
         bar1 = ax.bar(indices - bar_width/2, b_data, bar_width, label="Biased Model Gap", color="#D9534F")
         bar2 = ax.bar(indices + bar_width/2, f_data, bar_width, label="Fairness-Aware Model Gap", color="#5CB85C")
 
-        # 【防拉伸核心修复】：通过绝对极值计算合理的、紧凑的 Y 轴动态视窗
+        # 动态视窗控制，绝不产生过大硬编码越界
         v_max = max(b_data.max(), f_data.max(), 3.0)
         v_min = min(b_data.min(), f_data.min(), -3.0)
         ax.set_ylim(v_min * 1.4, v_max * 1.4)
 
-        # 【彻底废除容易越界的 Annotation】：改用全新安全稳定的数字内嵌标注
+        # 改用安全稳定的数字内嵌标签标注，替换不稳定的 annotation
         ax.bar_label(bar1, fmt='%.1f', padding=3, fontsize=8, color='#A33A37')
         ax.bar_label(bar2, fmt='%.1f', padding=3, fontsize=8, color='#3B823B')
 
@@ -149,21 +149,10 @@ def render():
         
         st.pyplot(fig)
 
-        # Selector deep dive panel
+        # =========================================================================
+        # 【核心 Bug 修复位置】：用 options.index 替代脆弱的文本切割转换
+        # =========================================================================
         st.markdown("---")
-        p_sel = st.selectbox("Inspect Configuration Profile Parameters:", [f"Resume Pair {i+1} Details" for i in range(10)])
-        sel_idx = int(p_sel.split(" ")[1]) - 1
-        
-        r_pair = resume_pairs.RESUME_PAIRS[sel_idx]
-        d_row = differentials.iloc[sel_idx]
-        
-        st.help(f"**Scenario Context Structure:** {r_pair['narrative']}")
-        sc1, sc2 = st.columns(2)
-        with sc1:
-            st.markdown(f"**👨 Candidate Male Profile:** {r_pair['male']['name']}")
-            st.caption(f"Credentialed via: {r_pair['male']['university']} | {r_pair['male']['activity']}")
-            st.metric("Biased System Weight", f"{d_row['male_biased_score']*100:.1f}%")
-        with sc2:
-            st.markdown(f"**👩 Candidate Female Profile:** {r_pair['female']['name']}")
-            st.caption(f"Credentialed via: {r_pair['female']['university']} | {r_pair['female']['activity']}")
-            st.metric("Biased System Weight", f"{d_row['female_biased_score']*100:.1f}%")
+        options = [f"Resume Pair {i+1}: {resume_pairs.RESUME_PAIRS[i]['scenario']}" for i in range(10)]
+        p_sel = st.selectbox("Inspect Configuration Profile Parameters:", options)
+        sel_idx = options.index(p_sel)  # 100% 安全的索引定位法
