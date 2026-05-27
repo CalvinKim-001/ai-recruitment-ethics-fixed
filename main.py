@@ -1,6 +1,6 @@
 """
 main.py
-------
+-------
 Main entry point for the AI Recruitment Ethics Dashboard.
 """
 
