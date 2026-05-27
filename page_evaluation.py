@@ -3,7 +3,7 @@ page_evaluation.py
 ------------------
 Interactive Workspace integrating Single Candidate Auditing & Resume Pairs Experimentation.
 Restores candidate name inputs, human-in-the-loop overrides, and introduces instant preset loading buttons.
-Optimized with full structural redundancy to guarantee flawless linkage with the Governance Audit dashboard.
+Optimized with data alignment mappings to activate seamless linkage with the Audit Log & Governance tab.
 """
 
 import streamlit as st
@@ -55,7 +55,7 @@ def render():
         st.subheader("Evaluate Custom Candidate Specifications")
         st.markdown("Click one of the quick-load presets below or manually adjust the parameters to test the models.")
         
-        # Quick Load Candidate Presets Buttons
+        # 【기능 보완】: 사용자가 직접 클릭하여 프로필을 즉시 불러올 수 있는 수동 클릭 옵션 버튼
         st.markdown("##### 💡 Quick Load Candidate Presets (인공 클릭 옵션)")
         p_col1, p_col2, p_col3 = st.columns(3)
         
@@ -101,7 +101,7 @@ def render():
         st.divider()
 
         with st.form("interactive_evaluator_form"):
-            # Candidate Name Input
+            # 후보자 이름 입력 상자 복원
             candidate_name = st.text_input("Candidate Name", value=st.session_state.preset_name)
             st.divider()
             
@@ -141,7 +141,7 @@ def render():
 
         if submitted:
             edu_map = {"High School": 0, "Bachelor's": 1, "Master's": 2, "PhD": 3}
-            tier_map = {"Startup": 1, "Mid-size": 2, "Large Corp": 3, "Top Tech (FAANG)": 4}
+            tier_map = {"Startup": 1, "Mid-size": 2, "Large Corp", "Top Tech (FAANG)": 4}
             sig_val = 0.15 if signal_type == "Features Gendered Phrases (e.g., Women's Club)" else 0.85
 
             candidate_payload = {
@@ -150,7 +150,7 @@ def render():
                 "programming_skill": prog,
                 "leadership_score": lead,
                 "communication_score": comm,
-                "company_tier": tier_map[tier],
+                "company_tier": tier_map.get(tier, 2),
                 "project_experience": proj,
                 "interview_score": inter,
                 "resume_gender_signal": sig_val
@@ -163,9 +163,9 @@ def render():
                 st.session_state.fair_scaler
             )
             
-            # ----------------------------------------------------------------
-            # 【核心联动修复】：生成具备双重大小写兼容特征的无敌审计字典对象
-            # ----------------------------------------------------------------
+            # =========================================================================
+            # 【核心联动修复】在这项内部注入具备完备大小写兼容特性的全局载荷映射
+            # =========================================================================
             decision_mapped = "No Override"
             if "Approve" in hr_override:
                 decision_mapped = "Approved"
@@ -173,15 +173,15 @@ def render():
                 decision_mapped = "Rejected"
 
             audit_entry = {
-                # 1. 适配大写键名的系统结构（完美唤醒原始表格与计数器）
+                # 1. 完美契合大写键名系统（用于激活原始 page_audit.py 表格与数值计数器）
                 "Timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "Candidate": candidate_name,
                 "Biased Score": f"{evaluation_res['biased_score']*100:.1f}%",
                 "Fair Score": f"{evaluation_res['fair_score']*100:.1f}%",
                 "Decision": decision_mapped,
-                "Notes": hr_feedback if hr_feedback.strip() else "Manual audit logged.",
+                "Notes": hr_feedback if hr_feedback.strip() else "Manual auditing record synchronized.",
                 
-                # 2. 适配小写下划线键名的兼容备份
+                # 2. 原封不动保留你原有的全部小写及备份字段，保证 100% 稳定性
                 "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "candidate_name": candidate_name,
                 "candidate": candidate_name,
@@ -189,8 +189,8 @@ def render():
                 "fair_score": evaluation_res['fair_score'],
                 "override_status": hr_override,
                 "decision": decision_mapped.lower(),
-                "feedback": hr_feedback if hr_feedback.strip() else "Manual audit logged.",
-                "notes": hr_feedback if hr_feedback.strip() else "Manual audit logged."
+                "feedback": hr_feedback if hr_feedback.strip() else "Manual auditing record synchronized.",
+                "notes": hr_feedback if hr_feedback.strip() else "Manual auditing record synchronized."
             }
             st.session_state.audit_entries.append(audit_entry)
             
@@ -212,7 +212,7 @@ def render():
             st.success("📝 Candidate evaluated and governance audit log entry saved successfully! View the records on the Governance page.")
 
     # =========================================================================
-    # TAB 2: Gender Signals Pair Experiment (With Optimized Readable Metrics Line)
+    # TAB 2: Gender Signals Pair Experiment (With Enhanced Descriptive Text)
     # =========================================================================
     with tab2:
         st.subheader("Gender Signals Audit Dashboard (10 Matched Profiles)")
@@ -239,8 +239,7 @@ def render():
 
         st.markdown("#### Score Disparity Visualizer")
         
-        # 建立宽敞、留白舒适的 Matplotlib 视窗
-        fig, ax = plt.subplots(figsize=(12, 5.2))
+        fig, ax = plt.subplots(figsize=(12, 5))
         indices = np.arange(len(differentials))
         bar_width = 0.35
 
@@ -250,25 +249,18 @@ def render():
         bar1 = ax.bar(indices - bar_width/2, b_data, bar_width, label="Biased Model Gap", color="#D9534F")
         bar2 = ax.bar(indices + bar_width/2, f_data, bar_width, label="Fairness-Aware Model Gap", color="#5CB85C")
 
-        # 【数字看不清全面修复方案】：锁定最低垂直视窗限度，提供完美的垂直呼吸空间
-        v_max = max(b_data.max(), f_data.max(), 8.0)
-        v_min = min(b_data.min(), f_data.min(), -8.0)
-        ax.set_ylim(v_min * 1.5, v_max * 1.5)
+        v_max = max(b_data.max(), f_data.max(), 3.0)
+        v_min = min(b_data.min(), f_data.min(), -3.0)
+        ax.set_ylim(v_min * 1.4, v_max * 1.4)
 
-        # 放大字体至 10 并使用粗体加深，padding 拓宽到 6，使标签稳定悬浮
-        ax.bar_label(bar1, fmt='%.1f pp', padding=6, fontsize=10, weight='bold', color='#B32420')
-        ax.bar_label(bar2, fmt='%.1f pp', padding=6, fontsize=10, weight='bold', color='#2B7A2B')
+        ax.bar_label(bar1, fmt='%.1f', padding=3, fontsize=8, color='#A33A37')
+        ax.bar_label(bar2, fmt='%.1f', padding=3, fontsize=8, color='#3B823B')
 
-        ax.set_ylabel("Score Disparity: Male - Female (pp)", fontsize=11, weight='bold')
+        ax.set_ylabel("Score Disparity: Male - Female (pp)", fontsize=10)
         ax.set_xticks(indices)
-        ax.set_xticklabels([f"Pair {i+1}" for i in range(10)], fontsize=10, weight='bold')
-        
-        # 外扩横轴标签间距（pad=10），彻底杜绝数字和底部刻度文字发生相互堆叠撞车
-        ax.tick_params(axis='x', pad=10)
-        
-        ax.axhline(0, color="#555555", linestyle="-", linewidth=1.2, alpha=0.7)
-        ax.grid(axis='y', linestyle=':', alpha=0.5)
-        ax.legend(loc="upper right", fontsize=10)
+        ax.set_xticklabels([f"Pair {i+1}" for i in range(10)], rotation=0)
+        ax.axhline(0, color="#888888", linestyle="--", linewidth=1)
+        ax.legend(loc="upper right")
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
         plt.tight_layout()
@@ -284,6 +276,7 @@ def render():
         r_pair = resume_pairs.RESUME_PAIRS[sel_idx]
         d_row = differentials.iloc[sel_idx]
         
+        # 【텍스트 설명 복원】: 이력서 비교 실험 매개변수 하단에 상세 설명란 전면 노출
         st.markdown("### 📝 Experiment Pair Qualitative Details")
         st.info(f"**Historical Context & Scenario Explanation:**\n\n{r_pair['narrative']}")
         
