@@ -22,20 +22,17 @@ The AI assists the recruiter; it does not replace human judgment.
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import classification_report, confusion_matrix
-from fairlearn.reductions import ExponentiatedGradient, DemographicParity, EqualizedOdds
+from sklearn.metrics import classification_report
+from fairlearn.reductions import ExponentiatedGradient, EqualizedOdds
 import warnings
 warnings.filterwarnings("ignore")
 
 # Features used for model training.
-# IMPORTANT: Gender is INCLUDED as a training feature in the biased model
-# to show that even explicit demographic info enters the model through the data labels.
-# In the fairness-aware model, gender is used only as a fairness constraint, not a feature.
 FEATURE_COLUMNS = [
     "years_experience",
     "education_level",
@@ -60,6 +57,36 @@ def prepare_data(df: pd.DataFrame):
     Returns:
         X_train, X_test, y_train, y_test, gender_train, gender_test
     """
+    # 深度复制一份数据，避免影响全局 session_state
+    df = df.copy()
+
+    # =========================================================================
+    # 【核心修复】历史偏见隐式注入 (Historical Bias Injection Layer)
+    # 作用：由于底层 CSV 过于公平，我们在数据拆分前动态模拟注入历史招聘中的结构性偏见：
+    # 1. 强化特征绑定：让训练集中的 resume_gender_signal 真实反映出性别特征（男性高、女性低）。
+    # 2. 注入标签偏见：将未录用男性的 30% 翻转为录用（放水），将已录用女性的 35% 翻转为拒绝（打压）。
+    # =========================================================================
+    np.random.seed(42)
+    
+    # 1. 确保训练集中的性别暗示信号与实际性别存在统计学的 proxy（代理）关联
+    if "gender" in df.columns and "resume_gender_signal" in df.columns:
+        df.loc[df["gender"] == "Male", "resume_gender_signal"] = np.random.uniform(0.70, 0.95, size=(df["gender"] == "Male").sum())
+        df.loc[df["gender"] == "Female", "resume_gender_signal"] = np.random.uniform(0.05, 0.30, size=(df["gender"] == "Female").sum())
+    
+    # 2. 改造录用标签，产生历史不公平性
+    if "gender" in df.columns and "hired" in df.columns:
+        # 倾向于放水男性 candidate
+        male_unhired = (df["gender"] == "Male") & (df["hired"] == 0)
+        if male_unhired.sum() > 0:
+            flip_male = np.random.choice(df[male_unhired].index, size=int(0.30 * male_unhired.sum()), replace=False)
+            df.loc[flip_male, "hired"] = 1
+            
+        # 倾向于打压女性 candidate
+        female_hired = (df["gender"] == "Female") & (df["hired"] == 1)
+        if female_hired.sum() > 0:
+            flip_female = np.random.choice(df[female_hired].index, size=int(0.35 * female_hired.sum()), replace=False)
+            df.loc[flip_female, "hired"] = 0
+
     X = df[FEATURE_COLUMNS]
     y = df[TARGET_COLUMN]
     gender = df[SENSITIVE_COLUMN]
@@ -77,18 +104,7 @@ def prepare_data(df: pd.DataFrame):
 def train_biased_model(X_train: pd.DataFrame, y_train: pd.Series) -> Pipeline:
     """
     Train the biased baseline recruitment model.
-
-    Uses Gradient Boosting — a powerful and common real-world model choice.
-    Trained on raw imbalanced data with NO fairness corrections.
-
-    ETHICAL NOTE:
-    This model will learn that "male-associated patterns" predict hiring success
-    because the training labels were generated from biased historical decisions.
-    The model is not programmed to discriminate — it LEARNS to discriminate
-    from the data. This is the central lesson of the Amazon case.
-
-    Returns:
-        A trained sklearn Pipeline (scaler + classifier)
+    Uses Gradient Boosting — trained on raw imbalanced data with NO fairness corrections.
     """
     pipeline = Pipeline([
         ("scaler", StandardScaler()),  # Normalize features
@@ -108,13 +124,11 @@ def train_fairness_aware_model(
     X_train: pd.DataFrame,
     y_train: pd.Series,
     gender_train: pd.Series
-) -> object:
+) -> tuple:
     """
     Train a fairness-aware recruitment model using Fairlearn's
     ExponentiatedGradient reduction with Equalized Odds constraint.
     """
-    # Base classifier: Logistic Regression is ideal here because it's
-    # interpretable and works well with Fairlearn's reduction framework.
     base_classifier = LogisticRegression(
         max_iter=1000,
         random_state=42,
@@ -128,8 +142,7 @@ def train_fairness_aware_model(
     fairness_model = ExponentiatedGradient(
         estimator=base_classifier,
         constraints=constraint,
-        eps=0.01,
-        sample_weight_name="sample_weight" # 增加参数以提高兼容性
+        eps=0.01
     )
 
     scaler = StandardScaler()
@@ -142,27 +155,27 @@ def train_fairness_aware_model(
         sensitive_features=gender_train.values
     )
 
-    # ==========================================
-    # 核心修复部分：创建一个包装器来手动计算 predict_proba
-    # 因为较新版本的 Fairlearn 默认不直接暴露这个方法
-    # ==========================================
+    # =========================================================================
+    # 健壮性修复：创建一个完全兼容 sklearn 管道和特征名称要求的概率包装器
+    # =========================================================================
     class FairlearnProbWrapper:
         def __init__(self, model):
             self.model = model
             self.classes_ = np.array([0, 1])
 
         def predict(self, X):
-            return self.model.predict(X)
+            # 基于加权加总的 predict_proba 提供确定性的 0.5 判定阈值，防止内部随机预测导致的指标抖动
+            proba = self.predict_proba(X)
+            return (proba[:, 1] >= 0.5).astype(int)
 
         def predict_proba(self, X):
-            # 将 DataFrame 转换为 numpy 数组以防兼容性问题
-            X_array = X.values if hasattr(X, 'values') else X
-
-            # ExponentiatedGradient 内部由多个子模型（predictors_）和对应的权重（weights_）组成
-            # 我们通过对所有子模型的概率结果进行加权平均，来得出最终的概率分数
-            proba = np.zeros((X_array.shape[0], 2))
+            # 始终将输入规整为带有正确列名的 DataFrame，消除 scikit-learn 的 Feature Names 警告或报错
+            if not isinstance(X, pd.DataFrame):
+                X = pd.DataFrame(X, columns=FEATURE_COLUMNS)
+                
+            proba = np.zeros((X.shape[0], 2))
             for predictor, weight in zip(self.model.predictors_, self.model.weights_):
-                proba += weight * predictor.predict_proba(X_array)
+                proba += weight * predictor.predict_proba(X)
             return proba
 
     wrapped_model = FairlearnProbWrapper(fairness_model)
@@ -174,7 +187,7 @@ def score_candidate(candidate_features: dict, biased_model, fairness_model, scal
     """
     Score a single candidate using both models.
     """
-    # Convert candidate dict to DataFrame row
+    # Convert candidate dict to DataFrame row with aligned columns
     X = pd.DataFrame([{col: candidate_features.get(col, 0) for col in FEATURE_COLUMNS}])
 
     # Biased model prediction
@@ -205,8 +218,8 @@ def score_resume_pairs(pairs_df: pd.DataFrame, biased_model, fairness_model, sca
 
     for _, row in pairs_df.iterrows():
         features = {col: row[col] for col in FEATURE_COLUMNS}
-
         X = pd.DataFrame([features])
+        
         biased_prob = biased_model.predict_proba(X)[0][1]
 
         X_scaled = scaler.transform(X)
