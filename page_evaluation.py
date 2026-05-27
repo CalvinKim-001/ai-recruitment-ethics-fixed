@@ -90,14 +90,21 @@ def render():
                 st.session_state.fair_scaler
             )
             
-            # 建立系统快照结构并完美追加至全局审计日志链条
+            # 【核心修复】：将判定逻辑和命名与 page_audit.py 严密对齐
+            is_override = hr_override != "No Override - Follow AI Advice"
+            eval_id = f"EVAL-{len(st.session_state.audit_entries) + 1:03d}"
+            
             audit_entry = {
+                "evaluation_id": eval_id,
                 "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "candidate_name": candidate_name,
-                "biased_score": evaluation_res['biased_score'],
-                "fair_score": evaluation_res['fair_score'],
-                "override_status": hr_override,
-                "feedback": hr_feedback if hr_feedback.strip() else "No comment supplied by auditor."
+                "biased_score": float(evaluation_res['biased_score']),
+                "fair_score": float(evaluation_res['fair_score']),
+                "biased_recommendation": evaluation_res.get('biased_recommendation', "Recommend" if evaluation_res['biased_score'] >= 0.5 else "Reject"),
+                "fair_recommendation": evaluation_res.get('fair_recommendation', "Recommend" if evaluation_res['fair_score'] >= 0.5 else "Reject"),
+                "recruiter_override": is_override,
+                "recruiter_decision": hr_override if is_override else "—",
+                "recruiter_notes": hr_feedback if hr_feedback.strip() else "No comment supplied by auditor."
             }
             st.session_state.audit_entries.append(audit_entry)
             
@@ -119,7 +126,7 @@ def render():
             st.success("📝 Candidate evaluated and governance audit log entry saved successfully! View the records on the Governance page.")
 
     # =========================================================================
-    # TAB 2: 10组简历配对实验看板（数字标签防拉伸，完美补充说明项缺失）
+    # TAB 2: 10组简历配对实验看板
     # =========================================================================
     with tab2:
         st.subheader("Gender Signals Audit Dashboard (10 Matched Profiles)")
@@ -146,24 +153,20 @@ def render():
 
         st.markdown("#### Score Disparity Visualizer")
         
-        # 建立画幅控制结构
         fig, ax = plt.subplots(figsize=(12, 5))
         indices = np.arange(len(differentials))
         bar_width = 0.35
 
-        # 换算至百分点值 (pp)
         b_data = differentials["biased_score_gap"] * 100
         f_data = differentials["fair_score_gap"] * 100
 
         bar1 = ax.bar(indices - bar_width/2, b_data, bar_width, label="Biased Model Gap", color="#D9534F")
         bar2 = ax.bar(indices + bar_width/2, f_data, bar_width, label="Fairness-Aware Model Gap", color="#5CB85C")
 
-        # 动态视窗控制，绝不产生过大硬编码越界导致拉伸
         v_max = max(b_data.max(), f_data.max(), 3.0)
         v_min = min(b_data.min(), f_data.min(), -3.0)
         ax.set_ylim(v_min * 1.4, v_max * 1.4)
 
-        # 改用安全稳定的数字内嵌标签标注
         ax.bar_label(bar1, fmt='%.1f', padding=3, fontsize=8, color='#A33A37')
         ax.bar_label(bar2, fmt='%.1f', padding=3, fontsize=8, color='#3B823B')
 
@@ -178,16 +181,14 @@ def render():
         
         st.pyplot(fig)
 
-        # 下拉审计详情面板
         st.markdown("---")
         options = [f"Resume Pair {i+1}: {resume_pairs.RESUME_PAIRS[i]['scenario']}" for i in range(10)]
         p_sel = st.selectbox("Inspect Configuration Profile Parameters:", options)
-        sel_idx = options.index(p_sel)  # 采用100%安全的内置索引精确定位
+        sel_idx = options.index(p_sel)
         
         r_pair = resume_pairs.RESUME_PAIRS[sel_idx]
         d_row = differentials.iloc[sel_idx]
         
-        # 【功能补齐与强化】：完美拉齐展示学术研究文本、简历细节对比、彻底解决说明缺失问题
         st.markdown("### 📝 Experiment Pair Qualitative Details")
         st.info(f"**Historical Context & Scenario Explanation:**\n\n{r_pair['narrative']}")
         
