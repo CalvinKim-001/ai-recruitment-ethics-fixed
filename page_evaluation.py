@@ -149,7 +149,7 @@ def render():
                 "programming_skill": prog,
                 "leadership_score": lead,
                 "communication_score": comm,
-                "company_tier": tier_map[tier],
+                "company_tier": tier_map.get(tier, 2),
                 "project_experience": proj,
                 "interview_score": inter,
                 "resume_gender_signal": sig_val
@@ -162,26 +162,24 @@ def render():
                 st.session_state.fair_scaler
             )
             
-            # =========================================================================
-            # 【这里是核心修复位置】：将选择框翻译成表格需要的 Approved / Rejected 状态
-            # 并同时写入大写首字母键名与小写键名，实现 100% 数据流多态同步联动
-            # =========================================================================
+            # 核心转化：将选择框文本转换为 page_audit.py 页面最底层需要的标准状态词
             decision_mapped = "No Override"
             if "Approve" in hr_override:
                 decision_mapped = "Approved"
             elif "Reject" in hr_override or "Decline" in hr_override:
                 decision_mapped = "Rejected"
 
+            # 核心联动修复：构建同时支持大写开头键名与小写下划线键名的全字段字典，激活数据流互通
             audit_entry = {
-                # 1. 注入大写键名（精确同步 page_audit.py 页面表格与计数卡片）
+                # 1. 对齐大写键名（唤醒 page_audit.py 汇总看板与归档表格数据）
                 "Timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "Candidate": candidate_name,
                 "Biased Score": f"{evaluation_res['biased_score']*100:.1f}%",
                 "Fair Score": f"{evaluation_res['fair_score']*100:.1f}%",
                 "Decision": decision_mapped,
-                "Notes": hr_feedback if hr_feedback.strip() else "Audit synced.",
+                "Notes": hr_feedback if hr_feedback.strip() else "Auditing log synchronized.",
                 
-                # 2. 原封不动保留小写备份，防止破坏系统任何其他辅助组件
+                # 2. 保留原有全部小写字段，保障向后绝对强壮性
                 "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "candidate_name": candidate_name,
                 "candidate": candidate_name,
@@ -189,8 +187,8 @@ def render():
                 "fair_score": evaluation_res['fair_score'],
                 "override_status": hr_override,
                 "decision": decision_mapped.lower(),
-                "feedback": hr_feedback if hr_feedback.strip() else "Audit synced.",
-                "notes": hr_feedback if hr_feedback.strip() else "Audit synced."
+                "feedback": hr_feedback if hr_feedback.strip() else "Auditing log synchronized.",
+                "notes": hr_feedback if hr_feedback.strip() else "Auditing log synchronized."
             }
             st.session_state.audit_entries.append(audit_entry)
             
@@ -212,7 +210,7 @@ def render():
             st.success("📝 Candidate evaluated and governance audit log entry saved successfully! View the records on the Governance page.")
 
     # =========================================================================
-    # TAB 2: Gender Signals Pair Experiment (With Enhanced Descriptive Text)
+    # TAB 2: Gender Signals Pair Experiment (完全保留你的原有图表与数据格式)
     # =========================================================================
     with tab2:
         st.subheader("Gender Signals Audit Dashboard (10 Matched Profiles)")
@@ -221,4 +219,85 @@ def render():
         pairs_df = resume_pairs.get_all_pairs_dataframe()
         differentials = models.score_resume_pairs(
             pairs_df,
-            st.session_state.biased_
+            st.session_state.biased_model,
+            st.session_state.fair_model,
+            st.session_state.fair_scaler
+        )
+
+        avg_b_gap = differentials["biased_score_gap"].mean() * 100
+        avg_f_gap = differentials["fair_score_gap"].mean() * 100
+        avg_red = differentials["gap_reduction"].mean() * 100
+        imp_p = sum(differentials["gap_reduction"] > 0)
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Avg Gap — Biased Model", f"{avg_b_gap:+.2f}pp")
+        m2.metric("Avg Gap — Fair Model", f"{avg_f_gap:+.2f}pp")
+        m3.metric("Average Gap Mitigation", f"{avg_red:.2f}pp")
+        m4.metric("Mitigated Pairs", f"{imp_p}/10")
+
+        st.markdown("#### Score Disparity Visualizer")
+        
+        fig, ax = plt.subplots(figsize=(12, 5))
+        indices = np.arange(len(differentials))
+        bar_width = 0.35
+
+        b_data = differentials["biased_score_gap"] * 100
+        f_data = differentials["fair_score_gap"] * 100
+
+        bar1 = ax.bar(indices - bar_width/2, b_data, bar_width, label="Biased Model Gap", color="#D9534F")
+        bar2 = ax.bar(indices + bar_width/2, f_data, bar_width, label="Fairness-Aware Model Gap", color="#5CB85C")
+
+        v_max = max(b_data.max(), f_data.max(), 3.0)
+        v_min = min(b_data.min(), f_data.min(), -3.0)
+        ax.set_ylim(v_min * 1.4, v_max * 1.4)
+
+        ax.bar_label(bar1, fmt='%.1f', padding=3, fontsize=8, color='#A33A37')
+        ax.bar_label(bar2, fmt='%.1f', padding=3, fontsize=8, color='#3B823B')
+
+        ax.set_ylabel("Score Disparity: Male - Female (pp)", fontsize=10)
+        ax.set_xticks(indices)
+        ax.set_xticklabels([f"Pair {i+1}" for i in range(10)], rotation=0)
+        ax.axhline(0, color="#888888", linestyle="--", linewidth=1)
+        ax.legend(loc="upper right")
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        plt.tight_layout()
+        
+        st.pyplot(fig)
+
+        # Dropdown selection panel with 100% stable indexing
+        st.markdown("---")
+        options = [f"Resume Pair {i+1}: {resume_pairs.RESUME_PAIRS[i]['scenario']}" for i in range(10)]
+        p_sel = st.selectbox("Inspect Configuration Profile Parameters:", options)
+        sel_idx = options.index(p_sel)
+        
+        r_pair = resume_pairs.RESUME_PAIRS[sel_idx]
+        d_row = differentials.iloc[sel_idx]
+        
+        # 【텍스트 설명 복원】: 이력서 비교 실험 매개변수 하단에 상세 설명란 전면 노出
+        st.markdown("### 📝 Experiment Pair Qualitative Details")
+        st.info(f"**Historical Context & Scenario Explanation:**\n\n{r_pair['narrative']}")
+        
+        sc1, sc2 = st.columns(2)
+        with sc1:
+            st.markdown(f"#### 👨 Male Candidate Resume Profile")
+            st.markdown(f"* **Candidate Name:** {r_pair['male']['name']}")
+            st.markdown(f"* **Graduated University:** {r_pair['male']['university']}")
+            st.markdown(f"* **Activity Phrasing (Standard Vector):** `{r_pair['male']['activity']}`")
+            st.markdown("---")
+            st.markdown("**📊 Model Evaluation Results:**")
+            st.metric("Biased Baseline Model Score", f"{d_row['male_biased_score']*100:.1f}%")
+            st.metric("Fairness-Aware Model Score", f"{d_row['male_fair_score']*100:.1f}%")
+        with sc2:
+            st.markdown(f"#### 👩 Female Candidate Resume Profile")
+            st.markdown(f"* **Candidate Name:** {r_pair['female']['name']}")
+            st.markdown(f"* **Graduated University:** {r_pair['female']['university']}")
+            st.markdown(f"* **Activity Phrasing (Gender Vector):** `{r_pair['female']['activity']}`")
+            st.markdown("---")
+            st.markdown("**📊 Model Evaluation Results:**")
+            st.metric("Biased Baseline Model Score", f"{d_row['female_biased_score']*100:.1f}%",
+                      delta=f"{(d_row['female_biased_score'] - d_row['male_biased_score'])*100:.1f}% Bias Penalty" if d_row['biased_score_gap'] != 0 else None,
+                      delta_color="inverse")
+            st.metric("Fairness-Aware Model Score", f"{d_row['female_fair_score']*100:.1f}%",
+                      delta=f"{(d_row['female_fair_score'] - d_row['male_fair_score'])*100:.1f}% Disparity" if d_row['fair_score_gap'] != 0 else None,
+                      delta_color="off")
