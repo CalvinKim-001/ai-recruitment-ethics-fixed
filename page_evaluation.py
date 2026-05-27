@@ -2,7 +2,7 @@
 page_evaluation.py
 ------------------
 Interactive Workspace integrating Single Candidate Auditing & Resume Pairs Experimentation.
-Fixes the ValueError string splitting bug using robust indexing lookup.
+Restores missing Candidate Name, Human-in-the-Loop Overrides, and detailed textual explanations.
 """
 
 import streamlit as st
@@ -26,13 +26,17 @@ def render():
     tab1, tab2 = st.tabs(["🎯 Interactive Candidate Evaluator", "📊 Gender Signals Pair Experiment"])
 
     # =========================================================================
-    # TAB 1: 实时单人求职者特征组合评估（找回的核心功能）
+    # TAB 1: 实时单人求职者特征组合评估（完美找回丢失的姓名、Override及反馈功能）
     # =========================================================================
     with tab1:
         st.subheader("Evaluate Custom Candidate Specifications")
         st.markdown("Simulate a custom profile to observe real-time risk disparity metrics between systems.")
         
         with st.form("interactive_evaluator_form"):
+            # 【功能找回】：候选人姓名输入框
+            candidate_name = st.text_input("Candidate Name", "Alex Morgan")
+            st.divider()
+            
             c1, c2, c3 = st.columns(3)
             with c1:
                 exp = st.slider("Years of Industry Experience", 0, 10, 3)
@@ -46,15 +50,27 @@ def render():
                 proj = st.slider("Completed Open Source Projects", 0, 5, 2)
                 inter = st.slider("Live Technical Interview Evaluation", 0, 100, 70)
                 signal_type = st.radio("Resume Phrasing Signal Pattern", ["Standard Profile", "Features Gendered Phrases (e.g., Women's Club)"])
+            
+            st.divider()
+            # 【功能找回】：人机协作（Human-in-the-Loop）治理改写项与合规日志反馈框
+            st.markdown("##### 👥 Human-in-the-Loop Governance Override")
+            hr_override = st.selectbox(
+                "Recruiter Override AI Algorithmic Recommendation?", 
+                ["No Override - Follow AI Advice", "Force Approve / Recommend for Interview", "Force Reject / Decline Profile"]
+            )
+            hr_feedback = st.text_area(
+                "HR Governance Feedback & Auditing Notes", 
+                placeholder="Provide qualitative justification for manual override, bias mitigation tracking or compliance record logs..."
+            )
 
+            submitted = st.form_submit_button("Run Algorithmic Auditing & Log Entry", type="primary")
+
+        if submitted:
             # Map categories back into standard feature models values
             edu_map = {"High School": 0, "Bachelor's": 1, "Master's": 2, "PhD": 3}
             tier_map = {"Startup": 1, "Mid-size": 2, "Large Corp": 3, "Top Tech (FAANG)": 4}
             sig_val = 0.15 if signal_type == "Features Gendered Phrases (e.g., Women's Club)" else 0.85
 
-            submitted = st.form_submit_button("Run Algorithmic Auditing", type="primary")
-
-        if submitted:
             candidate_payload = {
                 "years_experience": exp,
                 "education_level": edu_map[edu],
@@ -74,6 +90,17 @@ def render():
                 st.session_state.fair_scaler
             )
             
+            # 建立系统快照结构并完美追加至全局审计日志链条
+            audit_entry = {
+                "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "candidate_name": candidate_name,
+                "biased_score": evaluation_res['biased_score'],
+                "fair_score": evaluation_res['fair_score'],
+                "override_status": hr_override,
+                "feedback": hr_feedback if hr_feedback.strip() else "No comment supplied by auditor."
+            }
+            st.session_state.audit_entries.append(audit_entry)
+            
             st.markdown("### 🔍 Evaluation Metrics Analysis")
             res_col1, res_col2 = st.columns(2)
             with res_col1:
@@ -88,9 +115,11 @@ def render():
                     st.success(f"Outcome: {evaluation_res['fair_recommendation']}")
                 else:
                     st.error(f"Outcome: {evaluation_res['fair_recommendation']}")
+                    
+            st.success("📝 Candidate evaluated and governance audit log entry saved successfully! View the records on the Governance page.")
 
     # =========================================================================
-    # TAB 2: 10组简历配对实验看板（彻底解决 Matplotlib 通天长线拉伸 Bug）
+    # TAB 2: 10组简历配对实验看板（数字标签防拉伸，完美补充说明项缺失）
     # =========================================================================
     with tab2:
         st.subheader("Gender Signals Audit Dashboard (10 Matched Profiles)")
@@ -129,12 +158,12 @@ def render():
         bar1 = ax.bar(indices - bar_width/2, b_data, bar_width, label="Biased Model Gap", color="#D9534F")
         bar2 = ax.bar(indices + bar_width/2, f_data, bar_width, label="Fairness-Aware Model Gap", color="#5CB85C")
 
-        # 动态视窗控制，绝不产生过大硬编码越界
+        # 动态视窗控制，绝不产生过大硬编码越界导致拉伸
         v_max = max(b_data.max(), f_data.max(), 3.0)
         v_min = min(b_data.min(), f_data.min(), -3.0)
         ax.set_ylim(v_min * 1.4, v_max * 1.4)
 
-        # 改用安全稳定的数字内嵌标签标注，替换不稳定的 annotation
+        # 改用安全稳定的数字内嵌标签标注
         ax.bar_label(bar1, fmt='%.1f', padding=3, fontsize=8, color='#A33A37')
         ax.bar_label(bar2, fmt='%.1f', padding=3, fontsize=8, color='#3B823B')
 
@@ -149,10 +178,39 @@ def render():
         
         st.pyplot(fig)
 
-        # =========================================================================
-        # 【核心 Bug 修复位置】：用 options.index 替代脆弱的文本切割转换
-        # =========================================================================
+        # 下拉审计详情面板
         st.markdown("---")
         options = [f"Resume Pair {i+1}: {resume_pairs.RESUME_PAIRS[i]['scenario']}" for i in range(10)]
         p_sel = st.selectbox("Inspect Configuration Profile Parameters:", options)
-        sel_idx = options.index(p_sel)  # 100% 安全的索引定位法
+        sel_idx = options.index(p_sel)  # 采用100%安全的内置索引精确定位
+        
+        r_pair = resume_pairs.RESUME_PAIRS[sel_idx]
+        d_row = differentials.iloc[sel_idx]
+        
+        # 【功能补齐与强化】：完美拉齐展示学术研究文本、简历细节对比、彻底解决说明缺失问题
+        st.markdown("### 📝 Experiment Pair Qualitative Details")
+        st.info(f"**Historical Context & Scenario Explanation:**\n\n{r_pair['narrative']}")
+        
+        sc1, sc2 = st.columns(2)
+        with sc1:
+            st.markdown(f"#### 👨 Male Candidate Resume Profile")
+            st.markdown(f"* **Candidate Name:** {r_pair['male']['name']}")
+            st.markdown(f"* **Graduated University:** {r_pair['male']['university']}")
+            st.markdown(f"* **Activity Phrasing (Standard Vector):** `{r_pair['male']['activity']}`")
+            st.markdown("---")
+            st.markdown("**📊 Model Evaluation Results:**")
+            st.metric("Biased Baseline Model Score", f"{d_row['male_biased_score']*100:.1f}%")
+            st.metric("Fairness-Aware Model Score", f"{d_row['male_fair_score']*100:.1f}%")
+        with sc2:
+            st.markdown(f"#### 👩 Female Candidate Resume Profile")
+            st.markdown(f"* **Candidate Name:** {r_pair['female']['name']}")
+            st.markdown(f"* **Graduated University:** {r_pair['female']['university']}")
+            st.markdown(f"* **Activity Phrasing (Gender Vector):** `{r_pair['female']['activity']}`")
+            st.markdown("---")
+            st.markdown("**📊 Model Evaluation Results:**")
+            st.metric("Biased Baseline Model Score", f"{d_row['female_biased_score']*100:.1f}%",
+                      delta=f"{(d_row['female_biased_score'] - d_row['male_biased_score'])*100:.1f}% Bias Penalty" if d_row['biased_score_gap'] != 0 else None,
+                      delta_color="inverse")
+            st.metric("Fairness-Aware Model Score", f"{d_row['female_fair_score']*100:.1f}%",
+                      delta=f"{(d_row['female_fair_score'] - d_row['male_fair_score'])*100:.1f}% Disparity" if d_row['fair_score_gap'] != 0 else None,
+                      delta_color="off")
