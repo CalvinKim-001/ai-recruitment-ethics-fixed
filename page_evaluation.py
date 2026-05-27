@@ -1,284 +1,137 @@
 """
 page_evaluation.py
 ------------------
-Interactive Workspace integrating Single Candidate Auditing & Resume Pairs Experimentation.
-Restores candidate name inputs, human-in-the-loop overrides, and introduces instant preset loading buttons.
+Streamlined Recruiter Workspace optimized for live presentations.
+Eliminates text inputs and sliders. Provides instant candidate drop-downs 
+and direct clicking action buttons for human-in-the-loop overrides.
 """
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import os
 import models
 import resume_pairs
 
 def render():
-    st.title("⚖️ Candidate Evaluation Workspace")
-    st.markdown("Explore individual screening assessments or evaluate paired compliance experiments.")
+    st.title("🤝 Algorithmic Auditing & Human Governance Workspace")
+    st.markdown("Select a candidate profile to view risk disparity metrics, then use the clicking tokens below to issue human decisions.")
 
     # Model training validation gate
     if not st.session_state.models_trained:
         st.warning("⚙️ AI Models are not initialized yet. Please navigate to the **Fairness Audit Dashboard** to trigger training routines first.")
         return
 
-    # Initialize form preset variables in session state if not present
-    if "preset_name" not in st.session_state:
-        st.session_state.preset_name = "Alex Morgan"
-    if "preset_exp" not in st.session_state:
-        st.session_state.preset_exp = 3
-    if "preset_edu" not in st.session_state:
-        st.session_state.preset_edu = "Bachelor's"
-    if "preset_tier" not in st.session_state:
-        st.session_state.preset_tier = "Mid-size"
-    if "preset_prog" not in st.session_state:
-        st.session_state.preset_prog = 75
-    if "preset_lead" not in st.session_state:
-        st.session_state.preset_lead = 60
-    if "preset_comm" not in st.session_state:
-        st.session_state.preset_comm = 65
-    if "preset_proj" not in st.session_state:
-        st.session_state.preset_proj = 2
-    if "preset_inter" not in st.session_state:
-        st.session_state.preset_inter = 70
-    if "preset_signal" not in st.session_state:
-        st.session_state.preset_signal = "Standard Profile"
+    # ----------------------------------------------------------------
+    # 1. 核心计算与总体差距柱状图渲染（保持图表极简典雅，数字内嵌防拉伸）
+    # ----------------------------------------------------------------
+    pairs_df = resume_pairs.get_all_pairs_dataframe()
+    differentials = models.score_resume_pairs(
+        pairs_df,
+        st.session_state.biased_model,
+        st.session_state.fair_model,
+        st.session_state.fair_scaler
+    )
 
-    # Use Streamlit Tabs to keep interactive features and experiments organized
-    tab1, tab2 = st.tabs(["🎯 Interactive Candidate Evaluator", "📊 Gender Signals Pair Experiment"])
+    avg_b_gap = differentials["biased_score_gap"].mean() * 100
+    avg_f_gap = differentials["fair_score_gap"].mean() * 100
+    avg_red = differentials["gap_reduction"].mean() * 100
+    imp_p = sum(differentials["gap_reduction"] > 0)
 
-    # =========================================================================
-    # TAB 1: Interactive Candidate Evaluator (With Manual Clicking Presets)
-    # =========================================================================
-    with tab1:
-        st.subheader("Evaluate Custom Candidate Specifications")
-        st.markdown("Click one of the quick-load presets below or manually adjust the parameters to test the models.")
-        
-        # 【기능 보완】: 사용자가 직접 클릭하여 프로필을 즉시 불러올 수 있는 수동 클릭 옵션 버튼
-        st.markdown("##### 💡 Quick Load Candidate Presets (인공 클릭 옵션)")
-        p_col1, p_col2, p_col3 = st.columns(3)
-        
-        if p_col1.button("👨 Load Qualified Male Profile (James)"):
-            st.session_state.preset_name = "James Whitfield"
-            st.session_state.preset_exp = 2
-            st.session_state.preset_edu = "Bachelor's"
-            st.session_state.preset_tier = "Mid-size"
-            st.session_state.preset_prog = 88
-            st.session_state.preset_lead = 82
-            st.session_state.preset_comm = 78
-            st.session_state.preset_proj = 4
-            st.session_state.preset_inter = 85
-            st.session_state.preset_signal = "Standard Profile"
-            st.rerun()
-            
-        if p_col2.button("👩 Load Paired Female Profile with 'Women's' Signal (Claire)"):
-            st.session_state.preset_name = "Claire Whitfield"
-            st.session_state.preset_exp = 2
-            st.session_state.preset_edu = "Bachelor's"
-            st.session_state.preset_tier = "Mid-size"
-            st.session_state.preset_prog = 88
-            st.session_state.preset_lead = 82
-            st.session_state.preset_comm = 78
-            st.session_state.preset_proj = 4
-            st.session_state.preset_inter = 85
-            st.session_state.preset_signal = "Features Gendered Phrases (e.g., Women's Club)"
-            st.rerun()
-            
-        if p_col3.button("🔄 Reset to Default Blank Profile"):
-            st.session_state.preset_name = "Alex Morgan"
-            st.session_state.preset_exp = 3
-            st.session_state.preset_edu = "Bachelor's"
-            st.session_state.preset_tier = "Mid-size"
-            st.session_state.preset_prog = 75
-            st.session_state.preset_lead = 60
-            st.session_state.preset_comm = 65
-            st.session_state.preset_proj = 2
-            st.session_state.preset_inter = 70
-            st.session_state.preset_signal = "Standard Profile"
-            st.rerun()
+    # 顶部四大核心指标
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Avg Gap — Biased Model", f"{avg_b_gap:+.2f}pp")
+    m2.metric("Avg Gap — Fair Model", f"{avg_f_gap:+.2f}pp")
+    m3.metric("Average Gap Mitigation", f"{avg_red:.2f}pp")
+    m4.metric("Mitigated Pairs", f"{imp_p}/10")
 
-        st.divider()
+    # 渲染防止拉伸的经典 Matplotlib 柱状图
+    fig, ax = plt.subplots(figsize=(12, 4))
+    indices = np.arange(len(differentials))
+    bar_width = 0.35
 
-        with st.form("interactive_evaluator_form"):
-            # 후보자 이름 입력 상자 복원
-            candidate_name = st.text_input("Candidate Name", value=st.session_state.preset_name)
-            st.divider()
-            
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                exp = st.slider("Years of Industry Experience", 0, 10, value=st.session_state.preset_exp)
-                
-                edu_options = ["High School", "Bachelor's", "Master's", "PhD"]
-                edu = st.selectbox("Completed Education Level", edu_options, index=edu_options.index(st.session_state.preset_edu))
-                
-                tier_options = ["Startup", "Mid-size", "Large Corp", "Top Tech (FAANG)"]
-                tier = st.selectbox("Previous Company Profile Tier", tier_options, index=tier_options.index(st.session_state.preset_tier))
-            with c2:
-                prog = st.slider("Programming Mastery Score", 0, 100, value=st.session_state.preset_prog)
-                lead = st.slider("Leadership Aptitude Vector", 0, 100, value=st.session_state.preset_lead)
-                comm = st.slider("Communication Articulation Index", 0, 100, value=st.session_state.preset_comm)
-            with c3:
-                proj = st.slider("Completed Open Source Projects", 0, 5, value=st.session_state.preset_proj)
-                inter = st.slider("Live Technical Interview Evaluation", 0, 100, value=st.session_state.preset_inter)
-                
-                sig_options = ["Standard Profile", "Features Gendered Phrases (e.g., Women's Club)"]
-                signal_type = st.radio("Resume Phrasing Signal Pattern", sig_options, index=sig_options.index(st.session_state.preset_signal))
-            
-            st.divider()
-            # 인사담당자 관리자 권한 Override 항목 및 거버넌스 피드백 입력란 복원
-            st.markdown("##### 👥 Human-in-the-Loop Governance Override")
-            hr_override = st.selectbox(
-                "Recruiter Override AI Algorithmic Recommendation?", 
-                ["No Override - Follow AI Advice", "Force Approve / Recommend for Interview", "Force Reject / Decline Profile"]
-            )
-            hr_feedback = st.text_area(
-                "HR Governance Feedback & Auditing Notes", 
-                placeholder="Provide qualitative justification for manual override, bias mitigation tracking or compliance record logs..."
-            )
+    b_data = differentials["biased_score_gap"] * 100
+    f_data = differentials["fair_score_gap"] * 100
 
-            submitted = st.form_submit_button("Run Algorithmic Auditing & Log Entry", type="primary")
+    bar1 = ax.bar(indices - bar_width/2, b_data, bar_width, label="Biased Model Gap", color="#D9534F")
+    bar2 = ax.bar(indices + bar_width/2, f_data, bar_width, label="Fairness-Aware Model Gap", color="#5CB85C")
 
-        if submitted:
-            edu_map = {"High School": 0, "Bachelor's": 1, "Master's": 2, "PhD": 3}
-            tier_map = {"Startup": 1, "Mid-size": 2, "Large Corp": 3, "Top Tech (FAANG)": 4}
-            sig_val = 0.15 if signal_type == "Features Gendered Phrases (e.g., Women's Club)" else 0.85
+    # 紧凑视窗控制，绝不产生高度拉伸 Bug
+    v_max = max(b_data.max(), f_data.max(), 3.0)
+    v_min = min(b_data.min(), f_data.min(), -3.0)
+    ax.set_ylim(v_min * 1.4, v_max * 1.4)
 
-            candidate_payload = {
-                "years_experience": exp,
-                "education_level": edu_map[edu],
-                "programming_skill": prog,
-                "leadership_score": lead,
-                "communication_score": comm,
-                "company_tier": tier_map[tier],
-                "project_experience": proj,
-                "interview_score": inter,
-                "resume_gender_signal": sig_val
-            }
-            
-            evaluation_res = models.score_candidate(
-                candidate_payload,
-                st.session_state.biased_model,
-                st.session_state.fair_model,
-                st.session_state.fair_scaler
-            )
-            
-            # 시스템 데이터 스냅샷을 생성하여 글로벌 감사 로그 객체에 저장
-            audit_entry = {
-                "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "candidate_name": candidate_name,
-                "biased_score": evaluation_res['biased_score'],
-                "fair_score": evaluation_res['fair_score'],
-                "override_status": hr_override,
-                "feedback": hr_feedback if hr_feedback.strip() else "No comment supplied by auditor."
-            }
-            st.session_state.audit_entries.append(audit_entry)
-            
-            st.markdown("### 🔍 Evaluation Metrics Analysis")
-            res_col1, res_col2 = st.columns(2)
-            with res_col1:
-                st.metric("Biased System Recommendation Score", f"{evaluation_res['biased_score']*100:.1f}%")
-                if evaluation_res['biased_score'] >= 0.5:
-                    st.success(f"Outcome: {evaluation_res['biased_recommendation']}")
-                else:
-                    st.error(f"Outcome: {evaluation_res['biased_recommendation']}")
-            with res_col2:
-                st.metric("Fairness-Improved Recommendation Score", f"{evaluation_res['fair_score']*100:.1f}%")
-                if evaluation_res['fair_score'] >= 0.5:
-                    st.success(f"Outcome: {evaluation_res['fair_recommendation']}")
-                else:
-                    st.error(f"Outcome: {evaluation_res['fair_recommendation']}")
-                    
-            st.success("📝 Candidate evaluated and governance audit log entry saved successfully! View the records on the Governance page.")
+    ax.bar_label(bar1, fmt='%.1f', padding=3, fontsize=8, color='#A33A37')
+    ax.bar_label(bar2, fmt='%.1f', padding=3, fontsize=8, color='#3B823B')
+
+    ax.set_ylabel("Score Disparity: Male - Female (pp)", fontsize=10)
+    ax.set_xticks(indices)
+    ax.set_xticklabels([f"Pair {i+1}" for i in range(10)], rotation=0)
+    ax.axhline(0, color="#888888", linestyle="--", linewidth=1)
+    ax.legend(loc="upper right")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    plt.tight_layout()
+    st.pyplot(fig)
+
+    st.divider()
 
     # =========================================================================
-    # TAB 2: Gender Signals Pair Experiment (With Enhanced Descriptive Text)
+    # 2. 全新重构的「HR 智能审计控制台」：无需键盘填写，全鼠标点击操作！
     # =========================================================================
-    with tab2:
-        st.subheader("Gender Signals Audit Dashboard (10 Matched Profiles)")
-        st.markdown("Identical academic and work backgrounds. The only variance lies within proxy linguistic flags.")
+    st.subheader("🎯 Live Recruiter Audit Console (Human-in-the-Loop)")
+    st.markdown("Select a candidate profile from the dropdown below to instantly invoke dual-model compliance tracking.")
 
-        pairs_df = resume_pairs.get_all_pairs_dataframe()
-        differentials = models.score_resume_pairs(
-            pairs_df,
-            st.session_state.biased_model,
-            st.session_state.fair_model,
-            st.session_state.fair_scaler
-        )
+    # 扁平化构建 20 位候选人的秒级检索列表（10组简历配对，每组包含1男1女）
+    candidate_options = []
+    candidate_lookup_table = {}
 
-        avg_b_gap = differentials["biased_score_gap"].mean() * 100
-        avg_f_gap = differentials["fair_score_gap"].mean() * 100
-        avg_red = differentials["gap_reduction"].mean() * 100
-        imp_p = sum(differentials["gap_reduction"] > 0)
-
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Avg Gap — Biased Model", f"{avg_b_gap:+.2f}pp")
-        m2.metric("Avg Gap — Fair Model", f"{avg_f_gap:+.2f}pp")
-        m3.metric("Average Gap Mitigation", f"{avg_red:.2f}pp")
-        m4.metric("Mitigated Pairs", f"{imp_p}/10")
-
-        st.markdown("#### Score Disparity Visualizer")
+    for pair in resume_pairs.RESUME_PAIRS:
+        p_id = pair["pair_id"]
+        scenario_title = pair["scenario"]
         
-        fig, ax = plt.subplots(figsize=(12, 5))
-        indices = np.arange(len(differentials))
-        bar_width = 0.35
-
-        b_data = differentials["biased_score_gap"] * 100
-        f_data = differentials["fair_score_gap"] * 100
-
-        bar1 = ax.bar(indices - bar_width/2, b_data, bar_width, label="Biased Model Gap", color="#D9534F")
-        bar2 = ax.bar(indices + bar_width/2, f_data, bar_width, label="Fairness-Aware Model Gap", color="#5CB85C")
-
-        v_max = max(b_data.max(), f_data.max(), 3.0)
-        v_min = min(b_data.min(), f_data.min(), -3.0)
-        ax.set_ylim(v_min * 1.4, v_max * 1.4)
-
-        ax.bar_label(bar1, fmt='%.1f', padding=3, fontsize=8, color='#A33A37')
-        ax.bar_label(bar2, fmt='%.1f', padding=3, fontsize=8, color='#3B823B')
-
-        ax.set_ylabel("Score Disparity: Male - Female (pp)", fontsize=10)
-        ax.set_xticks(indices)
-        ax.set_xticklabels([f"Pair {i+1}" for i in range(10)], rotation=0)
-        ax.axhline(0, color="#888888", linestyle="--", linewidth=1)
-        ax.legend(loc="upper right")
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        plt.tight_layout()
+        # 绑定男性实体
+        m_key = f"Pair {p_id} (Male) 👨‍💻 - {pair['male']['name']} [{scenario_title}]"
+        candidate_options.append(m_key)
+        candidate_lookup_table[m_key] = {"meta": pair["male"], "gender": "Male", "narrative": pair["narrative"], "pair_id": p_id}
         
-        st.pyplot(fig)
+        # 绑定女性实体
+        f_key = f"Pair {p_id} (Female) 👩‍💻 - {pair['female']['name']} [{scenario_title}]"
+        candidate_options.append(f_key)
+        candidate_lookup_table[f_key] = {"meta": pair["female"], "gender": "Female", "narrative": pair["narrative"], "pair_id": p_id}
 
-        # Dropdown selection panel with 100% stable indexing
-        st.markdown("---")
-        options = [f"Resume Pair {i+1}: {resume_pairs.RESUME_PAIRS[i]['scenario']}" for i in range(10)]
-        p_sel = st.selectbox("Inspect Configuration Profile Parameters:", options)
-        sel_idx = options.index(p_sel)
-        
-        r_pair = resume_pairs.RESUME_PAIRS[sel_idx]
-        d_row = differentials.iloc[sel_idx]
-        
-        # 【텍스트 설명 복원】: 이력서 비교 실험 매개변수 하단에 상세 설명란 전면 노출
-        st.markdown("### 📝 Experiment Pair Qualitative Details")
-        st.info(f"**Historical Context & Scenario Explanation:**\n\n{r_pair['narrative']}")
-        
-        sc1, sc2 = st.columns(2)
-        with sc1:
-            st.markdown(f"#### 👨 Male Candidate Resume Profile")
-            st.markdown(f"* **Candidate Name:** {r_pair['male']['name']}")
-            st.markdown(f"* **Graduated University:** {r_pair['male']['university']}")
-            st.markdown(f"* **Activity Phrasing (Standard Vector):** `{r_pair['male']['activity']}`")
-            st.markdown("---")
-            st.markdown("**📊 Model Evaluation Results:**")
-            st.metric("Biased Baseline Model Score", f"{d_row['male_biased_score']*100:.1f}%")
-            st.metric("Fairness-Aware Model Score", f"{d_row['male_fair_score']*100:.1f}%")
-        with sc2:
-            st.markdown(f"#### 👩 Female Candidate Resume Profile")
-            st.markdown(f"* **Candidate Name:** {r_pair['female']['name']}")
-            st.markdown(f"* **Graduated University:** {r_pair['female']['university']}")
-            st.markdown(f"* **Activity Phrasing (Gender Vector):** `{r_pair['female']['activity']}`")
-            st.markdown("---")
-            st.markdown("**📊 Model Evaluation Results:**")
-            st.metric("Biased Baseline Model Score", f"{d_row['female_biased_score']*100:.1f}%",
-                      delta=f"{(d_row['female_biased_score'] - d_row['male_biased_score'])*100:.1f}% Bias Penalty" if d_row['biased_score_gap'] != 0 else None,
-                      delta_color="inverse")
-            st.metric("Fairness-Aware Model Score", f"{d_row['female_fair_score']*100:.1f}%",
-                      delta=f"{(d_row['female_fair_score'] - d_row['male_fair_score'])*100:.1f}% Disparity" if d_row['fair_score_gap'] != 0 else None,
-                      delta_color="off")
+    # 100% 鼠标点击选择框
+    selected_candidate_key = st.selectbox("Choose Target Candidate Profile to Review:", candidate_options)
+    
+    # 抓取当前选中的候选人底层能力指标特征
+    current_target = candidate_lookup_table[selected_candidate_key]
+    candidate_data = current_target["meta"]
+    
+    # 注入模型必需的性别信号量特征（男性 0.85，女性含有Women's词汇赋予 0.15）
+    payload = candidate_data.copy()
+    payload["resume_gender_signal"] = 0.85 if current_target["gender"] == "Male" else 0.15
+
+    # 调度算法核心进行在线盲测评估
+    evaluation_res = models.score_candidate(
+        payload,
+        st.session_state.biased_model,
+        st.session_state.fair_model,
+        st.session_state.fair_scaler
+    )
+
+    # 用高级信息框渲染该求职者的学术背景叙事说明（解决说明缺失问题）
+    st.info(f"📌 **Qualitative Background & Context:** {current_target['narrative']}")
+
+    # 左右并排展示候选人的核心特质与两套模型的运行评分百分比对比
+    col_profile, col_scores = st.columns([4, 3])
+    
+    with col_profile:
+        st.markdown(f"##### 📋 Candidate Dossier: {candidate_data['name']} ({current_target['gender']})")
+        st.markdown(f"* **Graduated From:** `{candidate_data['university']}`")
+        st.markdown(f"* **Resume Extracted Activity:** `{candidate_data['activity']}`")
+        st.markdown(f"* **Experience & Interview:** {candidate_data['years_experience']} Years Exp | Interview Score: {candidate_data['interview_score']}/100")
+        st.markdown(f"* **Hard Skills Matrix:** Tech: {candidate_data['programming_skill']} | Leadership: {candidate_data['leadership_score']} | Comm: {candidate_data['communication_score']}")
+
+    with col_scores:
+        st.markdown("##### 📊 Algorithmic Scoring")
+        st.metric("Biased Baseline Model Score", f"{evaluation_
