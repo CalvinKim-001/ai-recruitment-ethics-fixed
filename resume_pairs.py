@@ -8,16 +8,6 @@ The ONLY differences are:
   - Candidate name (gendered)
   - University name (some are all-women's colleges — directly from the Amazon case)
   - Activity/club descriptions (gendered phrasing)
-
-This experiment is the most direct demonstration of the project's argument:
-When the biased model gives different scores to identical qualifications
-based only on gendered signals, that IS gender discrimination — even if
-the word "gender" never appears in the model's input features.
-
-ETHICAL NOTE:
-Amazon's AI penalized resumes containing the word "women's" — e.g.,
-"captain of women's chess club" received a lower score than
-"captain of chess club." These pairs replicate that exact dynamic.
 """
 
 RESUME_PAIRS = [
@@ -28,9 +18,7 @@ RESUME_PAIRS = [
             "Both candidates graduated top of their class with identical GPAs, "
             "identical internship history at a Tier 2 company, and identical "
             "project portfolios. The only difference: one attended MIT, the other "
-            "attended Wellesley College — a prestigious all-women's institution "
-            "whose alumnae include Hillary Clinton and Madeleine Albright. "
-            "Amazon's AI penalized exactly this kind of signal."
+            "attended Wellesley College — a prestigious all-women's institution."
         ),
         "male": {
             "name": "James Whitfield",
@@ -63,12 +51,9 @@ RESUME_PAIRS = [
         "pair_id": 2,
         "scenario": "Career changer with bootcamp background",
         "narrative": (
-            "Both candidates left non-technical careers after 3 years and "
-            "completed the same 6-month coding bootcamp. Both built identical "
-            "portfolio projects and received identical technical assessment scores. "
-            "The employment gap — more common among women who take caregiving breaks "
-            "— is a well-documented proxy variable that AI systems use to "
-            "inadvertently penalize women even when the gap is professionally irrelevant."
+            "Both left non-technical careers after 3 years and completed the same "
+            "6-month coding bootcamp. Both built identical portfolio projects. "
+            "Caregiving breaks often present proxy variables that models use to penalize women."
         ),
         "male": {
             "name": "Daniel Torres",
@@ -101,12 +86,9 @@ RESUME_PAIRS = [
         "pair_id": 3,
         "scenario": "Leadership experience through advocacy work",
         "narrative": (
-            "Both candidates list identical technical skills and identical GPA. "
-            "Their leadership experience is substantively the same — organizing "
-            "a community of 200+ members, running weekly events, managing speakers. "
-            "But one's club is 'Women in Tech' while the other is 'Tech Entrepreneurs.' "
-            "The word 'Women' in the club name was exactly what Amazon's system flagged. "
-            "The AI cannot understand that both represent equivalent leadership experience."
+            "Identical technical skills and GPA. One's club is 'Women in Tech' "
+            "while the other is 'Tech Entrepreneurs'. The word 'Women' in the club "
+            "name was exactly what triggered negative proxy scoring in real cases."
         ),
         "male": {
             "name": "Ryan Chen",
@@ -139,13 +121,9 @@ RESUME_PAIRS = [
         "pair_id": 4,
         "scenario": "Graduate degree from prestigious all-women's institution",
         "narrative": (
-            "Both hold Master's degrees from highly ranked institutions. "
-            "Both completed identical internships at a large corporation and "
-            "achieved identical assessment scores. Smith College, an all-women's "
-            "institution, consistently ranks among the top liberal arts colleges "
-            "in the United States. Yet AI systems trained on data that rarely "
-            "saw Smith graduates hired will likely score this credential lower — "
-            "not because of academic quality, but because of historical underrepresentation."
+            "Both hold Master's degrees from highly ranked institutions. Smith College "
+            "is an all-women's institution that ranks elite, yet historical imbalances "
+            "will score this credential lower due to historical pattern mismatching."
         ),
         "male": {
             "name": "Marcus Reed",
@@ -178,13 +156,9 @@ RESUME_PAIRS = [
         "pair_id": 5,
         "scenario": "Hackathon winner, early career",
         "narrative": (
-            "Both candidates won the same hackathon — a major achievement that "
-            "signals problem-solving ability, creativity, and teamwork. "
-            "The accomplishment is identical. The description differs only in "
-            "how it is phrased: 'hackathon winner' vs. 'winner of women's hackathon.' "
-            "The AI does not understand that women-specific competitions are often "
-            "equally or more competitive due to smaller participant pools — "
-            "it only sees the word 'women's' as a negative signal."
+            "Both won the same hackathon. The description differs only in phrasing: "
+            "'hackathon winner' vs. 'winner of women's hackathon'. The model treats "
+            "the modifier 'women's' as a penalty vector based on historical bias."
         ),
         "male": {
             "name": "Ethan Park",
@@ -217,12 +191,9 @@ RESUME_PAIRS = [
         "pair_id": 6,
         "scenario": "Self-taught developer, no formal degree",
         "narrative": (
-            "Both are self-taught developers who built identical GitHub portfolios "
-            "and passed identical technical assessments. Neither has a formal degree. "
-            "Studies show that self-taught women in tech are more likely to be "
-            "screened out at the resume stage than self-taught men with equivalent "
-            "portfolios — a pattern that AI systems trained on those screening "
-            "decisions will replicate and amplify."
+            "Self-taught developers with identical portfolios and no degrees. "
+            "Sociological studies indicate self-taught women are structurally screened out "
+            "at higher rates than men, a bias standard algorithms replicate."
         ),
         "male": {
             "name": "Oliver Davis",
@@ -255,13 +226,9 @@ RESUME_PAIRS = [
         "pair_id": 7,
         "scenario": "Scholarship recipient and academic high achiever",
         "narrative": (
-            "Both received prestigious merit scholarships and graduated with honors. "
-            "The Grace Hopper Scholarship — a real STEM scholarship awarded to women — "
-            "is named after computing pioneer Rear Admiral Grace Hopper, who invented "
-            "one of the first compiler programs. Yet an AI system that has never seen "
-            "this scholarship represented in its training data will treat it as an "
-            "unknown or even negative signal simply because 'Grace Hopper' does not "
-            "pattern-match to previously successful male candidates."
+            "Grace Hopper Scholarship is an elite STEM token for women. "
+            "An AI system that heavily anchors on historical male resume profiles "
+            "fails to contextualize this achievement positively."
         ),
         "male": {
             "name": "Liam Johnson",
@@ -294,14 +261,9 @@ RESUME_PAIRS = [
         "pair_id": 8,
         "scenario": "FAANG internship experience, high performer",
         "narrative": (
-            "Both interned at a top technology company and received identical "
-            "performance ratings. Both were offered return offers. "
-            "Both list the internship on their resume with identical descriptions. "
-            "This pair tests whether the model can recognize equivalent elite "
-            "experience regardless of the candidate's name. In real-world studies, "
-            "identical resumes with stereotypically female names receive fewer "
-            "callbacks than those with stereotypically male names — even from "
-            "human recruiters, before any AI is involved."
+            "Identical FAANG elite internship and return offers. "
+            "This pairs tests whether the model exhibits systemic preference shifts "
+            "solely based on gender proxy vectors."
         ),
         "male": {
             "name": "Alexander Kim",
@@ -334,13 +296,9 @@ RESUME_PAIRS = [
         "pair_id": 9,
         "scenario": "Non-traditional path: arts to engineering",
         "narrative": (
-            "Both candidates transitioned from humanities backgrounds into software "
-            "engineering through a Master's program — a path that is increasingly "
-            "common and increasingly valued for producing engineers who can communicate "
-            "complex ideas clearly. Both have identical post-transition records. "
-            "The female candidate's undergraduate thesis was on gender equity in STEM — "
-            "a topic that directly relates to this project, but which an AI model "
-            "trained on biased data might score negatively through proxy association."
+            "Transitioned from humanities into CS. The female candidate's "
+            "thesis was on 'Gender Equity in STEM' — a proxy feature that "
+            "a biased system naturally correlates negatively."
         ),
         "male": {
             "name": "Noah Patel",
@@ -373,14 +331,8 @@ RESUME_PAIRS = [
         "pair_id": 10,
         "scenario": "Experienced mid-level candidate seeking junior role",
         "narrative": (
-            "Both candidates have 5 years of experience but are applying for a "
-            "junior role — a common situation for career re-entrants, those returning "
-            "from parental leave, or those switching specializations. "
-            "Women are statistically more likely to be in this situation due to "
-            "caregiving responsibilities. The female candidate's resume lists "
-            "participation in a 'Women Returners' program — a legitimate professional "
-            "re-entry program — which may trigger negative scoring in an AI system "
-            "that has never seen this credential positively represented in training data."
+            "5 years of deep experience applying for junior roles (common for caregiving returners). "
+            "Female resume explicitly features 'Women Returners Program', triggering adverse scoring."
         ),
         "male": {
             "name": "Sebastian Walsh",
@@ -426,11 +378,7 @@ def get_pair_as_dataframe(pair: dict) -> "pd.DataFrame":
         candidate["gender"] = "Male" if role == "male" else "Female"
         candidate["scenario"] = pair["scenario"]
 
-        # ==========================================================
-        # 【核心修复】：在这里强行注入“简历性别暗示信号”
-        # 对应 data_generator.py 里的逻辑：
-        # 男性简历分配高分 (0.85)，女性简历由于含有 Women's 等词汇分配低分 (0.15)
-        # ==========================================================
+        # 强行拉开信号线：男性简历赋予高男性倾向信号值，女性简历赋予低男性倾向信号值
         if role == "male":
             candidate["resume_gender_signal"] = 0.85
         else:
