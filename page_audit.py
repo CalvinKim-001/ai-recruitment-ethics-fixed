@@ -9,12 +9,44 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import sys, os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from audit_log import (
-    get_recent_evaluations, get_override_statistics,
-    export_log_as_dataframe, clear_log
-)
+# =========================================================================
+# 【核心修复】：用原生 Session State 数据存取函数替代隔离的外部 audit_log 模块
+# =========================================================================
+def get_recent_evaluations(limit=50):
+    return st.session_state.audit_entries[-limit:]
+
+def get_override_statistics():
+    entries = st.session_state.audit_entries
+    total = len(entries)
+    if total == 0:
+        return {
+            "total_evaluations": 0, "total_overrides": 0, "override_rate_pct": 0,
+            "approved_overrides": 0, "rejected_overrides": 0
+        }
+    
+    overrides = [e for e in entries if e["recruiter_override"]]
+    total_overrides = len(overrides)
+    
+    # 统计审核人员的最终干预倾向
+    approved = sum(1 for e in overrides if "Approve" in e["recruiter_decision"])
+    rejected = sum(1 for e in overrides if "Reject" in e["recruiter_decision"])
+    
+    return {
+        "total_evaluations": total,
+        "total_overrides": total_overrides,
+        "override_rate_pct": round((total_overrides / total) * 100, 1),
+        "approved_overrides": approved,
+        "rejected_overrides": rejected
+    }
+
+def export_log_as_dataframe():
+    if not st.session_state.audit_entries:
+        return pd.DataFrame()
+    return pd.DataFrame(st.session_state.audit_entries)
+
+def clear_log():
+    st.session_state.audit_entries = []
 
 
 def render():
@@ -194,12 +226,9 @@ def render():
     # ----------------------------------------------------------------
     # SECTION 5: Responsible AI Procurement Checklist
     # ----------------------------------------------------------------
-    st.markdown("---")
+    st.divider()
     st.markdown("### ✅ Responsible AI Procurement Checklist for HR Departments")
-
-    st.markdown("""
-    *What should organizations ask before deploying any AI hiring tool?*
-    """)
+    st.markdown("""*What should organizations ask before deploying any AI hiring tool?*""")
 
     checklist_items = [
         ("📊", "Bias Audit", "Has the system been independently audited for gender, race, age, and disability bias before deployment? (Required under NYC Local Law 144)"),
@@ -222,7 +251,7 @@ def render():
             st.markdown(f"**{title}:** {description}")
 
     st.markdown("""
-    <div class='fair-note'>
+    <div style='background-color: #f1f8e9; border-left: 6px solid #558b2f; padding: 12px; border-radius: 4px; margin-top: 10px;'>
         <strong>📌 Note:</strong> Amazon's AI recruitment system failed on nearly every item
         in this checklist. It was not independently audited, did not explain its decisions,
         had no meaningful override mechanism for affected candidates, and was eventually
