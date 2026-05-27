@@ -11,7 +11,7 @@ from datetime import datetime
 import sys, os
 
 # =========================================================================
-# 【核心修复】：用原生 Session State 数据存取函数替代隔离的外部 audit_log 模块
+# 【数据层防御性重构】：兼容历史遗留脏数据，彻底消除 KeyError
 # =========================================================================
 def get_recent_evaluations(limit=50):
     return st.session_state.audit_entries[-limit:]
@@ -25,12 +25,27 @@ def get_override_statistics():
             "approved_overrides": 0, "rejected_overrides": 0
         }
     
-    overrides = [e for e in entries if e["recruiter_override"]]
+    # 使用 .get() 安全获取状态；同时兼容旧版本的 "override_status"
+    overrides = []
+    for e in entries:
+        is_override = e.get("recruiter_override")
+        if is_override is None:  # 说明是旧数据
+            legacy_status = str(e.get("override_status", ""))
+            is_override = "No Override" not in legacy_status and legacy_status != ""
+        if is_override:
+            overrides.append(e)
+
     total_overrides = len(overrides)
     
-    # 统计审核人员的最终干预倾向
-    approved = sum(1 for e in overrides if "Approve" in e["recruiter_decision"])
-    rejected = sum(1 for e in overrides if "Reject" in e["recruiter_decision"])
+    # 安全统计审核人员的最终干预倾向
+    approved = 0
+    rejected = 0
+    for e in overrides:
+        decision = str(e.get("recruiter_decision", e.get("override_status", "")))
+        if "Approve" in decision:
+            approved += 1
+        elif "Reject" in decision:
+            rejected += 1
     
     return {
         "total_evaluations": total,
@@ -43,7 +58,30 @@ def get_override_statistics():
 def export_log_as_dataframe():
     if not st.session_state.audit_entries:
         return pd.DataFrame()
-    return pd.DataFrame(st.session_state.audit_entries)
+    
+    # 动态数据清洗：将所有新旧不一的字典清洗为标准统一的 DataFrame 结构
+    normalized_entries = []
+    for idx, e in enumerate(st.session_state.audit_entries):
+        legacy_override = e.get("override_status", "No Override - Follow AI Advice")
+        is_override = e.get("recruiter_override", legacy_override != "No Override - Follow AI Advice")
+        decision = e.get("recruiter_decision", legacy_override if is_override else "—")
+        notes = e.get("recruiter_notes", e.get("feedback", "No comment supplied by auditor."))
+        
+        norm = {
+            "evaluation_id": e.get("evaluation_id", f"EVAL-{idx+1:03d}"),
+            "timestamp": e.get("timestamp", pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")),
+            "candidate_name": e.get("candidate_name", "Unknown"),
+            "biased_score": float(e.get("biased_score", 0.0)),
+            "fair_score": float(e.get("fair_score", 0.0)),
+            "biased_recommendation": e.get("biased_recommendation", "Recommend" if e.get("biased_score", 0.0) >= 0.5 else "Reject"),
+            "fair_recommendation": e.get("fair_recommendation", "Recommend" if e.get("fair_score", 0.0) >= 0.5 else "Reject"),
+            "recruiter_override": is_override,
+            "recruiter_decision": decision,
+            "recruiter_notes": notes
+        }
+        normalized_entries.append(norm)
+        
+    return pd.DataFrame(normalized_entries)
 
 def clear_log():
     st.session_state.audit_entries = []
