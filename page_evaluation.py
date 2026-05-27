@@ -1,428 +1,166 @@
 """
 page_evaluation.py
 ------------------
-Candidate Evaluation Dashboard — interactive resume input + matched resume pairs experiment.
-This is the most visceral demonstration: identical resumes, different scores.
+Renders the Candidate Evaluation and Gender Signals Experiment page.
+Fixes the vertical axis stretching bug and ensures reliable model scoring.
 """
 
 import streamlit as st
-import numpy as np
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
-import sys, os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-
-from models import FEATURE_COLUMNS
-from resume_pairs import RESUME_PAIRS, get_all_pairs_dataframe
-from audit_log import log_evaluation, log_recruiter_override
-from explainability import explain_single_candidate
-
-MALE_COLOR = "#1565C0"
-FEMALE_COLOR = "#AD1457"
-BIASED_COLOR = "#C62828"
-FAIR_COLOR = "#2E7D32"
-
-
-def _check_models():
-    if not st.session_state.get("models_trained"):
-        st.warning("⚠️ Models are not yet trained. Please visit **📊 Fairness Audit Dashboard** first to initialize the models.")
-        return False
-    return True
-
+import os
+import models
+import resume_pairs
 
 def render():
-    st.title("🔬 Candidate Evaluation")
+    st.title("🤝 Candidate Evaluation & Gender Signals Experiment")
+    st.markdown("""
+    This experiment demonstrates how bias manifests through **proxy variables** and implicit signals. 
+    We evaluate **10 pairs of identical resumes** where the only differences are gendered phrases 
+    (e.g., *'Women's Chess Club'* vs *'Chess Club'*).
+    """)
 
-    tab1, tab2 = st.tabs([
-        "🧪 Gender Signals Experiment — Matched Resume Pairs",
-        "👤 Evaluate a Custom Candidate",
-    ])
-
-    # ================================================================
-    # TAB 1: MATCHED RESUME PAIRS EXPERIMENT
-    # ================================================================
-    with tab1:
-        st.markdown("""
-        ## The Core Experiment: Identical Qualifications, Different Scores
-
-        This is the most direct test of gender bias in AI recruitment systems.
-        We present **10 pairs of candidates** — each pair has **completely identical**
-        qualifications. The only differences are:
-        - **Name** (gendered)
-        - **University** (some pairs use all-women's colleges)
-        - **Activity description** (e.g., "Women's Chess Club" vs "Chess Club")
-
-        If the biased model gives different scores to candidates with identical
-        qualifications, that score difference IS gender discrimination — regardless
-        of whether the word "gender" appears anywhere in the model's inputs.
-        """)
-
-        st.markdown("""
-        <div class='bias-alert'>
-            🚨 <strong>This replicates exactly what Amazon's system did.</strong>
-            The AI penalized the word "women's" in activity descriptions and
-            penalized graduates of all-women's colleges — not because these signals
-            indicated lesser qualifications, but because they were underrepresented
-            in historical hiring data.
-        </div>
-        """, unsafe_allow_html=True)
-
-        if not _check_models():
+    # ----------------------------------------------------------------
+    # 1. 核心安全检查：如果模型未初始化，提供一键就地训练，防止数据为 0 导致报错
+    # ----------------------------------------------------------------
+    if not st.session_state.models_trained:
+        st.warning("⚠️ Models are not initialized yet. Please train the models to view the experiment.")
+        
+        # 尝试寻找数据集
+        csv_path = "synthetic_hiring_data.csv"
+        if os.path.exists(csv_path):
+            if st.button("🚀 Initialize & Train Models Right Here", type="primary"):
+                with st.spinner("Injecting historical bias and training neural clusters..."):
+                    df = pd.read_csv(csv_path)
+                    X_train, X_test, y_train, y_test, g_train, g_test = models.prepare_data(df)
+                    
+                    # 训练并存入全局状态
+                    st.session_state.biased_model = models.train_biased_model(X_train, y_train)
+                    fair_model, fair_scaler = models.train_fairness_aware_model(X_train, y_train, g_train)
+                    st.session_state.fair_model = fair_model
+                    st.session_state.fair_scaler = fair_scaler
+                    st.session_state.dataset = df
+                    st.session_state.models_trained = True
+                    st.rerun()
+            return
+        else:
+            st.error(f"Missing '{csv_path}' in project directory. Please check your GitHub repository.")
             return
 
-        biased_model = st.session_state.biased_model
-        fair_model = st.session_state.fair_model
-        scaler = st.session_state.fair_scaler
-
-        # Score all pairs
-        pairs_results = []
-        for pair in RESUME_PAIRS:
-            for role in ["male", "female"]:
-                candidate = pair[role]
-                X = pd.DataFrame([{col: candidate.get(col, 0) for col in FEATURE_COLUMNS}])
-                biased_score = biased_model.predict_proba(X)[0][1]
-
-                X_scaled = scaler.transform(X)
-                X_scaled_df = pd.DataFrame(X_scaled, columns=FEATURE_COLUMNS)
-                fair_score = fair_model.predict_proba(X_scaled_df)[0][1]
-
-                pairs_results.append({
-                    "pair_id": pair["pair_id"],
-                    "scenario": pair["scenario"],
-                    "narrative": pair["narrative"],
-                    "name": candidate["name"],
-                    "university": candidate["university"],
-                    "activity": candidate["activity"],
-                    "gender": "Male" if role == "male" else "Female",
-                    "biased_score": round(float(biased_score), 4),
-                    "fair_score": round(float(fair_score), 4),
-                })
-
-        results_df = pd.DataFrame(pairs_results)
-
-        # Compute differentials
-        differentials = []
-        for pair_id in range(1, 11):
-            pair_data = results_df[results_df["pair_id"] == pair_id]
-            male_row = pair_data[pair_data["gender"] == "Male"].iloc[0]
-            female_row = pair_data[pair_data["gender"] == "Female"].iloc[0]
-            biased_gap = male_row["biased_score"] - female_row["biased_score"]
-            fair_gap = male_row["fair_score"] - female_row["fair_score"]
-            differentials.append({
-                "pair_id": pair_id,
-                "scenario": male_row["scenario"],
-                "narrative": male_row["narrative"],
-                "male_name": male_row["name"],
-                "female_name": female_row["name"],
-                "male_university": male_row["university"],
-                "female_university": female_row["university"],
-                "male_activity": male_row["activity"],
-                "female_activity": female_row["activity"],
-                "male_biased": male_row["biased_score"],
-                "female_biased": female_row["biased_score"],
-                "biased_gap": round(biased_gap, 4),
-                "male_fair": male_row["fair_score"],
-                "female_fair": female_row["fair_score"],
-                "fair_gap": round(fair_gap, 4),
-                "gap_reduction": round(abs(biased_gap) - abs(fair_gap), 4),
-            })
-        diff_df = pd.DataFrame(differentials)
-
-        # ── SUMMARY CHART ──────────────────────────────────────────
-        st.markdown("### 📊 Score Gap Summary: All 10 Pairs")
-        st.markdown("""
-        The chart below shows the **score gap** between identical male and female candidates
-        for both models. A positive gap means the male candidate scored higher.
-        **Larger bars = more discrimination. Smaller bars = less discrimination.**
-        """)
-
-        fig, ax = plt.subplots(figsize=(13, 5))
-        x = np.arange(10)
-        width = 0.35
-
-        bars_b = ax.bar(x - width/2, diff_df["biased_gap"] * 100, width,
-                       label="Biased Model Gap", color=BIASED_COLOR, alpha=0.85)
-        bars_f = ax.bar(x + width/2, diff_df["fair_gap"] * 100, width,
-                       label="Fairness-Aware Model Gap", color=FAIR_COLOR, alpha=0.85)
-
-        ax.axhline(y=0, color="black", linewidth=0.8, linestyle="--", alpha=0.5)
-        ax.set_xlabel("Resume Pair (1–10)")
-        ax.set_ylabel("Score Gap: Male − Female (%)")
-        ax.set_title("Gender Score Gaps — Identical Qualifications, Only Gendered Signals Differ\n"
-                     "Positive = Male scored higher | Closer to 0 = More equitable",
-                     fontweight="bold")
-        ax.set_xticks(x)
-        ax.set_xticklabels([f"Pair {i+1}" for i in range(10)], rotation=30, ha="right")
-        ax.legend()
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-
-        # Annotate max gap
-        max_gap_idx = diff_df["biased_gap"].abs().idxmax()
-        max_gap_val = diff_df.loc[max_gap_idx, "biased_gap"] * 100
-        ax.annotate(f"Largest gap:\n{max_gap_val:.1f}pp",
-                   xy=(max_gap_idx - width/2, max_gap_val),
-                   xytext=(max_gap_idx - width/2 + 1.2, max_gap_val + 1),
-                   arrowprops=dict(arrowstyle="->", color=BIASED_COLOR),
-                   fontsize=8, color=BIASED_COLOR)
-
-        plt.tight_layout()
-        st.pyplot(fig)
-        plt.close()
-
-        # Summary metrics
-        avg_biased_gap = diff_df["biased_gap"].abs().mean() * 100
-        avg_fair_gap = diff_df["fair_gap"].abs().mean() * 100
-        avg_reduction = diff_df["gap_reduction"].mean() * 100
-        pairs_improved = (diff_df["gap_reduction"] > 0).sum()
-
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Avg Gap — Biased Model", f"{avg_biased_gap:.2f}pp")
-        with col2:
-            st.metric("Avg Gap — Fair Model", f"{avg_fair_gap:.2f}pp")
-        with col3:
-            st.metric("Average Gap Reduction", f"{avg_reduction:.2f}pp")
-        with col4:
-            st.metric("Pairs With Improved Equity", f"{pairs_improved}/10")
-
-        # ── INDIVIDUAL PAIR EXPLORER ────────────────────────────────
-        st.markdown("---")
-        st.markdown("### 🔍 Explore Each Resume Pair")
-
-        selected_pair = st.selectbox(
-            "Select a resume pair to examine:",
-            options=list(range(10)),
-            format_func=lambda i: f"Pair {i+1}: {diff_df.iloc[i]['scenario']}"
+    # ----------------------------------------------------------------
+    # 2. 提取数据并计算得分差距
+    # ----------------------------------------------------------------
+    with st.spinner("Evaluating resume standard pairs..."):
+        pairs_df = resume_pairs.get_all_pairs_dataframe()
+        differentials = models.score_resume_pairs(
+            pairs_df,
+            st.session_state.biased_model,
+            st.session_state.fair_model,
+            st.session_state.fair_scaler
         )
 
-        pair_row = diff_df.iloc[selected_pair]
+    # ----------------------------------------------------------------
+    # 3. 渲染顶部的看板指标 (Metrics Dashboard)
+    # ----------------------------------------------------------------
+    # 将概率差距转换为百分点显示 (pp)
+    avg_biased_gap = differentials["biased_score_gap"].mean() * 100
+    avg_fair_gap = differentials["fair_score_gap"].mean() * 100
+    avg_reduction = differentials["gap_reduction"].mean() * 100
+    improved_pairs = sum(differentials["gap_reduction"] > 0)
 
-        # Narrative
-        st.markdown(f"""
-        <div style='background:#e8eaf6; border-radius:10px; padding:20px; margin:12px 0;'>
-            <div style='font-size:0.8rem; letter-spacing:0.1em; color:#3949ab; font-weight:700; margin-bottom:8px;'>
-                SCENARIO {pair_row['pair_id']} — {pair_row['scenario'].upper()}
-            </div>
-            <div style='font-size:0.95rem; line-height:1.8; color:#1a237e;'>
-                {pair_row['narrative']}
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Avg Gap — Biased Model", f"{avg_biased_gap:+.2f}pp")
+    m2.metric("Avg Gap — Fair Model", f"{avg_fair_gap:+.2f}pp")
+    m3.metric("Average Gap Reduction", f"{avg_reduction:.2f}pp", delta=f"{avg_reduction:.2f}pp" if avg_reduction > 0 else None)
+    m4.metric("Pairs With Improved Equity", f"{improved_pairs}/10")
 
-        # Resume comparison
-        col1, col2 = st.columns(2)
-        for col, gender, name_key, uni_key, act_key, biased_key, fair_key, color, bg in [
-            (col1, "Male", "male_name", "male_university", "male_activity",
-             "male_biased", "male_fair", MALE_COLOR, "#e3f2fd"),
-            (col2, "Female", "female_name", "female_university", "female_activity",
-             "female_biased", "female_fair", FEMALE_COLOR, "#fce4ec"),
-        ]:
-            with col:
-                b_score = pair_row[biased_key]
-                f_score = pair_row[fair_key]
-                b_rec = "✅ Recommend" if b_score >= 0.5 else "❌ Below Threshold"
-                f_rec = "✅ Recommend" if f_score >= 0.5 else "❌ Below Threshold"
+    st.divider()
 
-                st.markdown(f"""
-                <div style='background:{bg}; border-radius:12px; padding:20px;
-                            border: 2px solid {color};'>
-                    <div style='color:{color}; font-weight:700; font-size:1.1rem; margin-bottom:12px;'>
-                        {gender} Candidate
-                    </div>
-                    <div style='background:white; border-radius:8px; padding:12px; margin-bottom:12px;
-                                font-size:0.9rem; line-height:1.9;'>
-                        <b>Name:</b> {pair_row[name_key]}<br>
-                        <b>University:</b> {pair_row[uni_key]}<br>
-                        <b>Activity:</b> {pair_row[act_key]}<br>
-                        <b>All other qualifications:</b> Identical to paired candidate
-                    </div>
-                    <div style='display:flex; gap:8px;'>
-                        <div style='flex:1; background:#ffebee; border-radius:8px; padding:10px; text-align:center;'>
-                            <div style='font-size:0.7rem; color:#c62828; font-weight:700;'>BIASED MODEL</div>
-                            <div style='font-size:1.6rem; font-weight:800; color:#c62828;'>{b_score:.3f}</div>
-                            <div style='font-size:0.75rem;'>{b_rec}</div>
-                        </div>
-                        <div style='flex:1; background:#e8f5e9; border-radius:8px; padding:10px; text-align:center;'>
-                            <div style='font-size:0.7rem; color:#2e7d32; font-weight:700;'>FAIR MODEL</div>
-                            <div style='font-size:1.6rem; font-weight:800; color:#2e7d32;'>{f_score:.3f}</div>
-                            <div style='font-size:0.75rem;'>{f_rec}</div>
-                        </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+    # ----------------------------------------------------------------
+    # 4. 绘制柱状图（完美修复坐标轴动态拉伸问题）
+    # ----------------------------------------------------------------
+    st.subheader("Visualizing the Equity Gaps")
+    
+    fig, ax = plt.subplots(figsize=(12, 5.5))
+    x = np.arange(len(differentials))
+    width = 0.35
 
-        # Score gap analysis for this pair
-        b_gap = pair_row["biased_gap"] * 100
-        f_gap = pair_row["fair_gap"] * 100
-        reduction = pair_row["gap_reduction"] * 100
+    # 统一换算为百分点数据进行绘图
+    biased_plot_data = differentials["biased_score_gap"] * 100
+    fair_plot_data = differentials["fair_score_gap"] * 100
 
-        st.markdown(f"""
-        <div style='margin-top:16px; background:white; border-radius:10px; padding:16px;
-                    border:1px solid #e0e0e0;'>
-            <div style='font-weight:700; margin-bottom:8px;'>Score Gap Analysis for This Pair</div>
-            <div style='display:flex; gap:16px; font-size:0.9rem;'>
-                <div>🔴 <b>Biased model gap:</b> {b_gap:+.2f}pp {"(male scored higher)" if b_gap > 0 else "(female scored higher)"}</div>
-                <div>🟢 <b>Fair model gap:</b> {f_gap:+.2f}pp</div>
-                <div>{'✅' if reduction > 0 else '⚠️'} <b>Gap reduction:</b> {reduction:.2f}pp</div>
-            </div>
-            <div style='margin-top:8px; font-size:0.85rem; color:#666;'>
-                🔴 HUMAN REVIEW REQUIRED — These are AI recommendations, not hiring decisions.
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+    rects1 = ax.bar(x - width/2, biased_plot_data, width, label="Biased Model Gap", color="#D9534F")
+    rects2 = ax.bar(x + width/2, fair_plot_data, width, label="Fairness-Aware Model Gap", color="#5CB85C")
 
-    # ================================================================
-    # TAB 2: CUSTOM CANDIDATE EVALUATION
-    # ================================================================
-    with tab2:
-        st.markdown("## Evaluate a Custom Candidate")
-        st.markdown("""
-        Enter candidate details to receive AI hiring recommendations from both models.
-        All outputs require human review — the AI is a decision-support tool only.
-        """)
+    # 设定平滑的纵轴上下限，避免极小值时视觉缩放产生误导
+    max_val = max(biased_plot_data.max(), fair_plot_data.max(), 5.0)
+    min_val = min(biased_plot_data.min(), fair_plot_data.min(), -5.0)
+    ax.set_ylim(min_val * 1.3, max_val * 1.3)
 
-        if not _check_models():
-            return
+    ax.set_ylabel("Score Gap: Male - Female (Percentage Points)", fontsize=10)
+    ax.set_title("Gender Score Gaps — Identical Qualifications, Only Gendered Signals Differ\nPositive = Male scored higher | Closer to 0 = More equitable", fontsize=12, fontweight="bold", pad=15)
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"Pair {i+1}" for i in range(len(differentials))], rotation=25, ha="right")
+    ax.axhline(0, color="#777777", linestyle="--", linewidth=0.8)
+    ax.legend(loc="upper right", frameon=True)
 
-        with st.form("candidate_form"):
-            st.markdown("#### Candidate Information")
-            col1, col2 = st.columns(2)
+    # =========================================================================
+    # 【完美解决拉伸 Bug】：只有当存在真实的偏见差距时，才采用自适应高度进行箭头标注
+    # =========================================================================
+    if biased_plot_data.max() > 0.01:
+        max_idx = biased_plot_data.idxmax()
+        peak_y = biased_plot_data.max()
+        # 动态偏移量：设为当前纵轴总视窗高度的 15%，绝不产生过大硬编码越界
+        dynamic_offset = (ax.get_ylim()[1] - ax.get_ylim()[0]) * 0.15
+        
+        ax.annotate(
+            f"Largest gap:\n{peak_y:.2f}pp",
+            xy=(max_idx - width/2, peak_y),
+            xytext=(max_idx - width/2, peak_y + dynamic_offset),
+            arrowprops=dict(facecolor="#D9534F", edgecolor="#D9534F", arrowstyle="->", connectionstyle="arc3,rad=.1"),
+            color="#D9534F",
+            fontweight="bold",
+            ha="center",
+            va="bottom"
+        )
+    else:
+        # 如果差距为 0，展示一个温和的中央中性提示，不画箭头
+        ax.text(4.5, (ax.get_ylim()[1])*0.7, "No noticeable gaps detected. Please ensure models are trained with biased data.", 
+                color="#777777", style="italic", ha="center", bbox=dict(facecolor='white', alpha=0.8, edgecolor='none'))
 
-            with col1:
-                name = st.text_input("Candidate Name", placeholder="e.g., Alex Johnson")
-                years_exp = st.slider("Years of Experience", 0, 10, 2)
-                education = st.selectbox("Education Level",
-                    ["High School (0)", "Bachelor's (1)", "Master's (2)", "PhD (3)"])
-                education_num = int(education.split("(")[1].rstrip(")"))
-                prog_skill = st.slider("Programming Skill (0–100)", 0, 100, 70)
-                leadership = st.slider("Leadership Score (0–100)", 0, 100, 65)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    plt.tight_layout()
+    
+    # 输出到 Streamlit
+    st.pyplot(fig)
 
-            with col2:
-                communication = st.slider("Communication Score (0–100)", 0, 100, 68)
-                company_tier = st.selectbox("Previous Company Tier",
-                    ["1 — Startup", "2 — Mid-size", "3 — Large Corp", "4 — Top Tech (FAANG)"])
-                company_tier_num = int(company_tier.split("—")[0].strip())
-                projects = st.slider("Number of Notable Projects", 0, 8, 3)
-                interview = st.slider("Interview Score (0–100)", 0, 100, 72)
-
-            submitted = st.form_submit_button("🔍 Evaluate Candidate", type="primary")
-
-        if submitted:
-            if not name:
-                st.error("Please enter a candidate name.")
-            else:
-                features = {
-                    "years_experience": years_exp,
-                    "education_level": education_num,
-                    "programming_skill": prog_skill,
-                    "leadership_score": leadership,
-                    "communication_score": communication,
-                    "company_tier": company_tier_num,
-                    "project_experience": projects,
-                    "interview_score": interview,
-                }
-
-                biased_model = st.session_state.biased_model
-                fair_model = st.session_state.fair_model
-                scaler = st.session_state.fair_scaler
-
-                X = pd.DataFrame([features])
-                biased_score = float(biased_model.predict_proba(X)[0][1])
-
-                X_scaled = scaler.transform(X)
-                X_scaled_df = pd.DataFrame(X_scaled, columns=FEATURE_COLUMNS)
-                fair_score = float(fair_model.predict_proba(X_scaled_df)[0][1])
-
-                b_rec = "Recommend for Interview" if biased_score >= 0.5 else "Below Threshold"
-                f_rec = "Recommend for Interview" if fair_score >= 0.5 else "Below Threshold"
-
-                # Log this evaluation
-                eval_id = log_evaluation(
-                    candidate_name=name,
-                    candidate_features=features,
-                    biased_score=biased_score,
-                    fair_score=fair_score,
-                    biased_recommendation=b_rec,
-                    fair_recommendation=f_rec,
-                )
-                st.session_state.last_evaluation = eval_id
-
-                # Results
-                st.markdown(f"### Results for: {name}")
-
-                st.markdown("""
-                <div class='human-review-badge'>
-                    🔴 HUMAN REVIEW REQUIRED — AI recommendation only, not a hiring decision
-                </div>
-                """, unsafe_allow_html=True)
-
-                col1, col2 = st.columns(2)
-                with col1:
-                    score_color = "#c62828" if biased_score < 0.5 else "#1b5e20"
-                    st.markdown(f"""
-                    <div style='background:#ffebee; border-radius:12px; padding:24px;
-                                border:2px solid #c62828; text-align:center;'>
-                        <div style='font-size:0.85rem; font-weight:700; color:#c62828; margin-bottom:8px;'>
-                            🔴 BIASED BASELINE MODEL
-                        </div>
-                        <div style='font-size:3rem; font-weight:800; color:{score_color};'>
-                            {biased_score:.3f}
-                        </div>
-                        <div style='font-size:0.9rem; margin-top:8px; font-weight:600;'>
-                            {b_rec}
-                        </div>
-                        <div style='font-size:0.75rem; color:#666; margin-top:8px;'>
-                            Trained on historically biased data.<br>May reflect gender patterns.
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                with col2:
-                    score_color2 = "#2e7d32" if fair_score >= 0.5 else "#4e342e"
-                    st.markdown(f"""
-                    <div style='background:#e8f5e9; border-radius:12px; padding:24px;
-                                border:2px solid #2e7d32; text-align:center;'>
-                        <div style='font-size:0.85rem; font-weight:700; color:#2e7d32; margin-bottom:8px;'>
-                            🟢 FAIRNESS-AWARE MODEL
-                        </div>
-                        <div style='font-size:3rem; font-weight:800; color:{score_color2};'>
-                            {fair_score:.3f}
-                        </div>
-                        <div style='font-size:0.9rem; margin-top:8px; font-weight:600;'>
-                            {f_rec}
-                        </div>
-                        <div style='font-size:0.75rem; color:#666; margin-top:8px;'>
-                            Fairness-improved model.<br>Not perfectly fair — human review essential.
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                # Recruiter override
-                st.markdown("---")
-                st.markdown("#### 👤 Recruiter Override")
-                st.markdown("""
-                As a recruiter, you have the authority to override the AI recommendation.
-                Your decision will be logged in the governance audit trail.
-                """)
-
-                col1, col2, col3, col4 = st.columns(4)
-                notes = st.text_input("Override notes (optional):", placeholder="Reason for override...")
-
-                with col1:
-                    if st.button("✅ Approve Candidate", use_container_width=True):
-                        log_recruiter_override(eval_id, "APPROVED", notes)
-                        st.success("Override logged: APPROVED")
-                with col2:
-                    if st.button("❌ Reject Candidate", use_container_width=True):
-                        log_recruiter_override(eval_id, "REJECTED", notes)
-                        st.error("Override logged: REJECTED")
-                with col3:
-                    if st.button("⏸️ Defer for Review", use_container_width=True):
-                        log_recruiter_override(eval_id, "DEFERRED", notes)
-                        st.info("Override logged: DEFERRED")
-                with col4:
-                    if st.button("📋 Accept AI Recommendation", use_container_width=True):
-                        st.info("No override. AI recommendation accepted.")
-
-                st.caption(f"Evaluation ID: `{eval_id}` — See Audit Log for full record.")
+    # ----------------------------------------------------------------
+    # 5. 底部提供交互式简历对查看器 (Interactive Resumes Inspector)
+    # ----------------------------------------------------------------
+    st.markdown("---")
+    st.subheader("🔍 Deep-Dive: Inspecting Resume Pairs")
+    
+    pair_selection = st.selectbox("Select a pair to audit details:", [f"Resume Pair {i+1}: {resume_pairs.RESUME_PAIRS[i]['scenario']}" for i in range(10)])
+    selected_idx = int(pair_selection.split(":")[0].replace("Resume Pair ", "")) - 1
+    
+    raw_pair = resume_pairs.RESUME_PAIRS[selected_idx]
+    diff_row = differentials.iloc[selected_idx]
+    
+    st.info(f"**Scenario Context:** {raw_pair['narrative']}")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(f"##### 👨‍💻 Male Candidate: {raw_pair['male']['name']}")
+        st.caption(f"**Background:** {raw_pair['male']['university']} | {raw_pair['male']['activity']}")
+        st.metric("Biased Prediction Score", f"{diff_row['male_biased_score']*100:.1f}%")
+        st.metric("Fairness Model Score", f"{diff_row['male_fair_score']*100:.1f}%")
+        
+    with col2:
+        st.markdown(f"##### 👩‍💻 Female Candidate: {raw_pair['female']['name']}")
+        st.caption(f"**Background:** {raw_pair['female']['university']} | {raw_pair['female']['activity']}")
+        st.metric("Biased Prediction Score", f"{diff_row['female_biased_score']*100:.1f}%", 
+                  delta=f"{(diff_row['female_biased_score'] - diff_row['male_biased_score'])*100:.1f}% Bias Penalty" if diff_row['biased_score_gap'] != 0 else None,
+                  delta_color="inverse")
+        st.metric("Fairness Model Score", f"{diff_row['female_fair_score']*100:.1f}%")
