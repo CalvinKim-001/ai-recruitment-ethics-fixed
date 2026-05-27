@@ -4,6 +4,7 @@ page_evaluation.py
 Streamlined Recruiter Workspace optimized for live presentations.
 Eliminates text inputs and sliders. Provides instant candidate drop-downs 
 and direct clicking action buttons for human-in-the-loop overrides.
+Clean coding standard applied to prevent invisible copy-paste syntax leaks.
 """
 
 import streamlit as st
@@ -22,9 +23,7 @@ def render():
         st.warning("⚙️ AI Models are not initialized yet. Please navigate to the **Fairness Audit Dashboard** to trigger training routines first.")
         return
 
-    # ----------------------------------------------------------------
     # 1. 核心计算与总体差距柱状图渲染（保持图表极简典雅，数字内嵌防拉伸）
-    # ----------------------------------------------------------------
     pairs_df = resume_pairs.get_all_pairs_dataframe()
     differentials = models.score_resume_pairs(
         pairs_df,
@@ -38,10 +37,10 @@ def render():
     avg_red = differentials["gap_reduction"].mean() * 100
     imp_p = sum(differentials["gap_reduction"] > 0)
 
-    # 顶部四大核心指标
+    # 顶部四大核心指标看板
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Avg Gap — Biased Model", f"{avg_b_gap:+.2f}pp")
-    m2.metric("Avg Gap — Fair Model", f"{avg_f_gap:+.2f}pp")
+    m1.metric("Avg Gap - Biased Model", f"{avg_b_gap:+.2f}pp")
+    m2.metric("Avg Gap - Fair Model", f"{avg_f_gap:+.2f}pp")
     m3.metric("Average Gap Mitigation", f"{avg_red:.2f}pp")
     m4.metric("Mitigated Pairs", f"{imp_p}/10")
 
@@ -76,9 +75,7 @@ def render():
 
     st.divider()
 
-    # =========================================================================
-    # 2. 全新重构的「HR 智能审计控制台」：无需键盘填写，全鼠标点击操作！
-    # =========================================================================
+    # 2. 全新重构的「HR 智能审计控制台」：全鼠标点击选择操作
     st.subheader("🎯 Live Recruiter Audit Console (Human-in-the-Loop)")
     st.markdown("Select a candidate profile from the dropdown below to instantly invoke dual-model compliance tracking.")
 
@@ -91,12 +88,12 @@ def render():
         scenario_title = pair["scenario"]
         
         # 绑定男性实体
-        m_key = f"Pair {p_id} (Male) 👨‍💻 - {pair['male']['name']} [{scenario_title}]"
+        m_key = f"Pair {p_id} (Male) - {pair['male']['name']} [{scenario_title}]"
         candidate_options.append(m_key)
         candidate_lookup_table[m_key] = {"meta": pair["male"], "gender": "Male", "narrative": pair["narrative"], "pair_id": p_id}
         
         # 绑定女性实体
-        f_key = f"Pair {p_id} (Female) 👩‍💻 - {pair['female']['name']} [{scenario_title}]"
+        f_key = f"Pair {p_id} (Female) - {pair['female']['name']} [{scenario_title}]"
         candidate_options.append(f_key)
         candidate_lookup_table[f_key] = {"meta": pair["female"], "gender": "Female", "narrative": pair["narrative"], "pair_id": p_id}
 
@@ -119,7 +116,7 @@ def render():
         st.session_state.fair_scaler
     )
 
-    # 用高级信息框渲染该求职者的学术背景叙事说明（解决说明缺失问题）
+    # 显示该求职者的学术背景叙事说明
     st.info(f"📌 **Qualitative Background & Context:** {current_target['narrative']}")
 
     # 左右并排展示候选人的核心特质与两套模型的运行评分百分比对比
@@ -134,4 +131,37 @@ def render():
 
     with col_scores:
         st.markdown("##### 📊 Algorithmic Scoring")
-        st.metric("Biased Baseline Model Score", f"{evaluation_
+        st.metric("Biased Baseline Model Score", f"{evaluation_res['biased_score']*100:.1f}%")
+        st.metric("Fairness-Improved Model Score", f"{evaluation_res['fair_score']*100:.1f}%")
+
+    # 3. 核心功能：纯人工点击选项按钮（👍批准 / 👎淘汰），无需填写任何文字需求！
+    st.markdown("##### 👥 Recruiter Executive Action (Click to issue final decree)")
+    st.caption("As a mandatory CSR governance framework, AI only provides recommendation vectors; humans retain absolute executive decision authority.")
+    
+    act_col1, act_col2 = st.columns(2)
+    
+    # 点击选项 1：强制录用 / 允许面试
+    if act_col1.button("👍 Human Override: Approve for Interview", type="primary", use_container_width=True):
+        audit_entry = {
+            "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "candidate_name": candidate_data['name'],
+            "biased_score": evaluation_res['biased_score'],
+            "fair_score": evaluation_res['fair_score'],
+            "override_status": "Force Approve / Recommend for Interview",
+            "feedback": f"Auditor executed manual compliance override. Mitigated baseline data bias for {candidate_data['name']}."
+        }
+        st.session_state.audit_entries.append(audit_entry)
+        st.success(f"📝 Decision Logged: {candidate_data['name']} has been manually APPROVED. Record synced to Governance tab!")
+        
+    # 点击选项 2：直接淘汰 / 婉拒
+    if act_col2.button("👎 Human Decision: Decline Profile", type="secondary", use_container_width=True):
+        audit_entry = {
+            "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "candidate_name": candidate_data['name'],
+            "biased_score": evaluation_res['biased_score'],
+            "fair_score": evaluation_res['fair_score'],
+            "override_status": "Force Reject / Decline Profile",
+            "feedback": f"Auditor declined profile entry based on combined contextual human review."
+        }
+        st.session_state.audit_entries.append(audit_entry)
+        st.warning(f"📝 Decision Logged: {candidate_data['name']} has been manually DECLINED. Record synced to Governance tab!")
