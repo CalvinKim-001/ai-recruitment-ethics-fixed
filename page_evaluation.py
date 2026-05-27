@@ -1,166 +1,168 @@
 """
 page_evaluation.py
 ------------------
-Renders the Candidate Evaluation and Gender Signals Experiment page.
-Fixes the vertical axis stretching bug and ensures reliable model scoring.
+Streamlined Recruiter Workspace optimized for live presentations.
+Eliminates text inputs and sliders. Provides instant candidate drop-downs 
+and direct clicking action buttons for human-in-the-loop overrides.
+Enhanced Matplotlib readability layer to ensure giant, ultra-clear numbers.
 """
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import os
 import models
 import resume_pairs
 
 def render():
-    st.title("🤝 Candidate Evaluation & Gender Signals Experiment")
-    st.markdown("""
-    This experiment demonstrates how bias manifests through **proxy variables** and implicit signals. 
-    We evaluate **10 pairs of identical resumes** where the only differences are gendered phrases 
-    (e.g., *'Women's Chess Club'* vs *'Chess Club'*).
-    """)
+    st.title("🤝 Algorithmic Auditing & Human Governance Workspace")
+    st.markdown("Select a candidate profile to view risk disparity metrics, then use the clicking tokens below to issue human decisions.")
 
-    # ----------------------------------------------------------------
-    # 1. 核心安全检查：如果模型未初始化，提供一键就地训练，防止数据为 0 导致报错
-    # ----------------------------------------------------------------
+    # Model training validation gate
     if not st.session_state.models_trained:
-        st.warning("⚠️ Models are not initialized yet. Please train the models to view the experiment.")
-        
-        # 尝试寻找数据集
-        csv_path = "synthetic_hiring_data.csv"
-        if os.path.exists(csv_path):
-            if st.button("🚀 Initialize & Train Models Right Here", type="primary"):
-                with st.spinner("Injecting historical bias and training neural clusters..."):
-                    df = pd.read_csv(csv_path)
-                    X_train, X_test, y_train, y_test, g_train, g_test = models.prepare_data(df)
-                    
-                    # 训练并存入全局状态
-                    st.session_state.biased_model = models.train_biased_model(X_train, y_train)
-                    fair_model, fair_scaler = models.train_fairness_aware_model(X_train, y_train, g_train)
-                    st.session_state.fair_model = fair_model
-                    st.session_state.fair_scaler = fair_scaler
-                    st.session_state.dataset = df
-                    st.session_state.models_trained = True
-                    st.rerun()
-            return
-        else:
-            st.error(f"Missing '{csv_path}' in project directory. Please check your GitHub repository.")
-            return
+        st.warning("⚙️ AI Models are not initialized yet. Please navigate to the **Fairness Audit Dashboard** to trigger training routines first.")
+        return
 
-    # ----------------------------------------------------------------
-    # 2. 提取数据并计算得分差距
-    # ----------------------------------------------------------------
-    with st.spinner("Evaluating resume standard pairs..."):
-        pairs_df = resume_pairs.get_all_pairs_dataframe()
-        differentials = models.score_resume_pairs(
-            pairs_df,
-            st.session_state.biased_model,
-            st.session_state.fair_model,
-            st.session_state.fair_scaler
-        )
+    # 1. 核心计算与总体差距柱状图渲染
+    pairs_df = resume_pairs.get_all_pairs_dataframe()
+    differentials = models.score_resume_pairs(
+        pairs_df,
+        st.session_state.biased_model,
+        st.session_state.fair_model,
+        st.session_state.fair_scaler
+    )
 
-    # ----------------------------------------------------------------
-    # 3. 渲染顶部的看板指标 (Metrics Dashboard)
-    # ----------------------------------------------------------------
-    # 将概率差距转换为百分点显示 (pp)
-    avg_biased_gap = differentials["biased_score_gap"].mean() * 100
-    avg_fair_gap = differentials["fair_score_gap"].mean() * 100
-    avg_reduction = differentials["gap_reduction"].mean() * 100
-    improved_pairs = sum(differentials["gap_reduction"] > 0)
+    avg_b_gap = differentials["biased_score_gap"].mean() * 100
+    avg_f_gap = differentials["fair_score_gap"].mean() * 100
+    avg_red = differentials["gap_reduction"].mean() * 100
+    imp_p = sum(differentials["gap_reduction"] > 0)
 
+    # 顶部四大核心指标看板
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Avg Gap — Biased Model", f"{avg_biased_gap:+.2f}pp")
-    m2.metric("Avg Gap — Fair Model", f"{avg_fair_gap:+.2f}pp")
-    m3.metric("Average Gap Reduction", f"{avg_reduction:.2f}pp", delta=f"{avg_reduction:.2f}pp" if avg_reduction > 0 else None)
-    m4.metric("Pairs With Improved Equity", f"{improved_pairs}/10")
+    m1.metric("Avg Gap - Biased Model", f"{avg_b_gap:+.2f}pp")
+    m2.metric("Avg Gap - Fair Model", f"{avg_f_gap:+.2f}pp")
+    m3.metric("Average Gap Mitigation", f"{avg_red:.2f}pp")
+    m4.metric("Mitigated Pairs", f"{imp_p}/10")
 
-    st.divider()
-
-    # ----------------------------------------------------------------
-    # 4. 绘制柱状图（完美修复坐标轴动态拉伸问题）
-    # ----------------------------------------------------------------
-    st.subheader("Visualizing the Equity Gaps")
+    st.markdown("#### Score Disparity Visualizer")
     
+    # 建立宽敞的画幅控制结构
     fig, ax = plt.subplots(figsize=(12, 5.5))
-    x = np.arange(len(differentials))
-    width = 0.35
+    indices = np.arange(len(differentials))
+    bar_width = 0.35
 
-    # 统一换算为百分点数据进行绘图
-    biased_plot_data = differentials["biased_score_gap"] * 100
-    fair_plot_data = differentials["fair_score_gap"] * 100
+    # 换算至百分点值 (pp)
+    b_data = differentials["biased_score_gap"] * 100
+    f_data = differentials["fair_score_gap"] * 100
 
-    rects1 = ax.bar(x - width/2, biased_plot_data, width, label="Biased Model Gap", color="#D9534F")
-    rects2 = ax.bar(x + width/2, fair_plot_data, width, label="Fairness-Aware Model Gap", color="#5CB85C")
-
-    # 设定平滑的纵轴上下限，避免极小值时视觉缩放产生误导
-    max_val = max(biased_plot_data.max(), fair_plot_data.max(), 5.0)
-    min_val = min(biased_plot_data.min(), fair_plot_data.min(), -5.0)
-    ax.set_ylim(min_val * 1.3, max_val * 1.3)
-
-    ax.set_ylabel("Score Gap: Male - Female (Percentage Points)", fontsize=10)
-    ax.set_title("Gender Score Gaps — Identical Qualifications, Only Gendered Signals Differ\nPositive = Male scored higher | Closer to 0 = More equitable", fontsize=12, fontweight="bold", pad=15)
-    ax.set_xticks(x)
-    ax.set_xticklabels([f"Pair {i+1}" for i in range(len(differentials))], rotation=25, ha="right")
-    ax.axhline(0, color="#777777", linestyle="--", linewidth=0.8)
-    ax.legend(loc="upper right", frameon=True)
+    bar1 = ax.bar(indices - bar_width/2, b_data, bar_width, label="Biased Model Gap", color="#D9534F")
+    bar2 = ax.bar(indices + bar_width/2, f_data, bar_width, label="Fairness-Aware Model Gap", color="#5CB85C")
 
     # =========================================================================
-    # 【完美解决拉伸 Bug】：只有当存在真实的偏见差距时，才采用自适应高度进行箭头标注
+    # 【视觉无敌优化】：硬性锁定纵轴范围，配合超大加粗数字标签，绝不重叠
     # =========================================================================
-    if biased_plot_data.max() > 0.01:
-        max_idx = biased_plot_data.idxmax()
-        peak_y = biased_plot_data.max()
-        # 动态偏移量：设为当前纵轴总视窗高度的 15%，绝不产生过大硬编码越界
-        dynamic_offset = (ax.get_ylim()[1] - ax.get_ylim()[0]) * 0.15
-        
-        ax.annotate(
-            f"Largest gap:\n{peak_y:.2f}pp",
-            xy=(max_idx - width/2, peak_y),
-            xytext=(max_idx - width/2, peak_y + dynamic_offset),
-            arrowprops=dict(facecolor="#D9534F", edgecolor="#D9534F", arrowstyle="->", connectionstyle="arc3,rad=.1"),
-            color="#D9534F",
-            fontweight="bold",
-            ha="center",
-            va="bottom"
-        )
-    else:
-        # 如果差距为 0，展示一个温和的中央中性提示，不画箭头
-        ax.text(4.5, (ax.get_ylim()[1])*0.7, "No noticeable gaps detected. Please ensure models are trained with biased data.", 
-                color="#777777", style="italic", ha="center", bbox=dict(facecolor='white', alpha=0.8, edgecolor='none'))
+    # 强制让 Y 轴视窗至少保持在 -15 到 +15 之间，留出完美的垂直呼吸空间
+    abs_max = max(abs(b_data).max(), abs(f_data).max(), 10.0)
+    ax.set_ylim(-abs_max * 1.4, abs_max * 1.4)
 
+    # 放大并加粗柱状图顶部的数字标签，使用高对比度深色
+    ax.bar_label(bar1, fmt='%.1fpp', padding=5, fontsize=10, weight='bold', color='#B32420')
+    ax.bar_label(bar2, fmt='%.1fpp', padding=5, fontsize=10, weight='bold', color='#2B7A2B')
+
+    ax.set_ylabel("Score Disparity: Male - Female (pp)", fontsize=11, weight='bold')
+    ax.set_xticks(indices)
+    ax.set_xticklabels([f"Pair {i+1}" for i in range(10)], fontsize=10, weight='bold')
+    
+    # 强化0刻度基准线
+    ax.axhline(0, color="#555555", linestyle="-", linewidth=1.2, alpha=0.7)
+    
+    # 开启轻量级网格线辅助视觉对齐
+    ax.grid(axis='y', linestyle=':', alpha=0.5)
+    
+    ax.legend(loc="upper right", fontsize=10, frameon=True)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     plt.tight_layout()
-    
-    # 输出到 Streamlit
     st.pyplot(fig)
 
-    # ----------------------------------------------------------------
-    # 5. 底部提供交互式简历对查看器 (Interactive Resumes Inspector)
-    # ----------------------------------------------------------------
-    st.markdown("---")
-    st.subheader("🔍 Deep-Dive: Inspecting Resume Pairs")
-    
-    pair_selection = st.selectbox("Select a pair to audit details:", [f"Resume Pair {i+1}: {resume_pairs.RESUME_PAIRS[i]['scenario']}" for i in range(10)])
-    selected_idx = int(pair_selection.split(":")[0].replace("Resume Pair ", "")) - 1
-    
-    raw_pair = resume_pairs.RESUME_PAIRS[selected_idx]
-    diff_row = differentials.iloc[selected_idx]
-    
-    st.info(f"**Scenario Context:** {raw_pair['narrative']}")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown(f"##### 👨‍💻 Male Candidate: {raw_pair['male']['name']}")
-        st.caption(f"**Background:** {raw_pair['male']['university']} | {raw_pair['male']['activity']}")
-        st.metric("Biased Prediction Score", f"{diff_row['male_biased_score']*100:.1f}%")
-        st.metric("Fairness Model Score", f"{diff_row['male_fair_score']*100:.1f}%")
+    st.divider()
+
+    # 2. 全新重构的「HR 智能审计控制台」
+    st.subheader("🎯 Live Recruiter Audit Console (Human-in-the-Loop)")
+    st.markdown("Select a candidate profile from the dropdown below to instantly invoke dual-model compliance tracking.")
+
+    candidate_options = []
+    candidate_lookup_table = {}
+
+    for pair in resume_pairs.RESUME_PAIRS:
+        p_id = pair["pair_id"]
+        scenario_title = pair["scenario"]
         
-    with col2:
-        st.markdown(f"##### 👩‍💻 Female Candidate: {raw_pair['female']['name']}")
-        st.caption(f"**Background:** {raw_pair['female']['university']} | {raw_pair['female']['activity']}")
-        st.metric("Biased Prediction Score", f"{diff_row['female_biased_score']*100:.1f}%", 
-                  delta=f"{(diff_row['female_biased_score'] - diff_row['male_biased_score'])*100:.1f}% Bias Penalty" if diff_row['biased_score_gap'] != 0 else None,
-                  delta_color="inverse")
-        st.metric("Fairness Model Score", f"{diff_row['female_fair_score']*100:.1f}%")
+        m_key = f"Pair {p_id} (Male) - {pair['male']['name']} [{scenario_title}]"
+        candidate_options.append(m_key)
+        candidate_lookup_table[m_key] = {"meta": pair["male"], "gender": "Male", "narrative": pair["narrative"], "pair_id": p_id}
+        
+        f_key = f"Pair {p_id} (Female) - {pair['female']['name']} [{scenario_title}]"
+        candidate_options.append(f_key)
+        candidate_lookup_table[f_key] = {"meta": pair["female"], "gender": "Female", "narrative": pair["narrative"], "pair_id": p_id}
+
+    selected_candidate_key = st.selectbox("Choose Target Candidate Profile to Review:", candidate_options)
+    
+    current_target = candidate_lookup_table[selected_candidate_key]
+    candidate_data = current_target["meta"]
+    
+    payload = candidate_data.copy()
+    payload["resume_gender_signal"] = 0.85 if current_target["gender"] == "Male" else 0.15
+
+    evaluation_res = models.score_candidate(
+        payload,
+        st.session_state.biased_model,
+        st.session_state.fair_model,
+        st.session_state.fair_scaler
+    )
+
+    st.info(f"📌 **Qualitative Background & Context:** {current_target['narrative']}")
+
+    col_profile, col_scores = st.columns([4, 3])
+    
+    with col_profile:
+        st.markdown(f"##### 📋 Candidate Dossier: {candidate_data['name']} ({current_target['gender']})")
+        st.markdown(f"* **Graduated From:** `{candidate_data['university']}`")
+        st.markdown(f"* **Resume Extracted Activity:** `{candidate_data['activity']}`")
+        st.markdown(f"* **Experience & Interview:** {candidate_data['years_experience']} Years Exp | Interview Score: {candidate_data['interview_score']}/100")
+        st.markdown(f"* **Hard Skills Matrix:** Tech: {candidate_data['programming_skill']} | Leadership: {candidate_data['leadership_score']} | Comm: {candidate_data['communication_score']}")
+
+    with col_scores:
+        st.markdown("##### 📊 Algorithmic Scoring")
+        st.metric("Biased Baseline Model Score", f"{evaluation_res['biased_score']*100:.1f}%")
+        st.metric("Fairness-Improved Model Score", f"{evaluation_res['fair_score']*100:.1f}%")
+
+    # 3. 纯人工点击选项按钮
+    st.markdown("##### 👥 Recruiter Executive Action (Click to issue final decree)")
+    st.caption("As a mandatory CSR governance framework, AI only provides recommendation vectors; humans retain absolute executive decision authority.")
+    
+    act_col1, act_col2 = st.columns(2)
+    
+    if act_col1.button("👍 Human Override: Approve for Interview", type="primary", use_container_width=True):
+        audit_entry = {
+            "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "candidate_name": candidate_data['name'],
+            "biased_score": evaluation_res['biased_score'],
+            "fair_score": evaluation_res['fair_score'],
+            "override_status": "Force Approve / Recommend for Interview",
+            "feedback": f"Auditor executed manual compliance override. Mitigated baseline data bias for {candidate_data['name']}."
+        }
+        st.session_state.audit_entries.append(audit_entry)
+        st.success(f"📝 Decision Logged: {candidate_data['name']} has been manually APPROVED. Record synced to Governance tab!")
+        
+    if act_col2.button("👎 Human Decision: Decline Profile", type="secondary", use_container_width=True):
+        audit_entry = {
+            "timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "candidate_name": candidate_data['name'],
+            "biased_score": evaluation_res['biased_score'],
+            "fair_score": evaluation_res['fair_score'],
+            "override_status": "Force Reject / Decline Profile",
+            "feedback": f"Auditor declined profile entry based on combined contextual human review."
+        }
+        st.session_state.audit_entries.append(audit_entry)
+        st.warning(f"📝 Decision Logged: {candidate_data['name']} has been manually DECLINED. Record synced to Governance tab!")
